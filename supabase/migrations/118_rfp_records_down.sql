@@ -1,7 +1,7 @@
 -- =====================================================================
--- 118 DOWN: removes the agency-owned RFP record. Drops the two link-column guards, the five link
--- columns on partner_rfp_inbox and rfp_magic_tokens, rfp_record_lines, rfp_records, their guards,
--- and current_user_entitled_lead_org_ids().
+-- 118 DOWN: removes the agency-owned RFP record. Drops the two link-column guards (the inbox one also
+-- carries the vendor allow-list, rulings O1/O2: rolling back REOPENS F1), the five link columns, the
+-- two tables, their guards, and current_user_entitled_lead_org_ids().
 --
 -- >>> FORCING THIS FILE LOSES EVERY RFP RECORD AND EVERY LINK. <<<
 -- Every rfp_records row (the master as broadcast, the rubric, budget categories, requirements, the
@@ -60,7 +60,7 @@ BEGIN
 END
 $down$;
 
--- The guards first, so dropping the columns fires nothing.
+-- The guards first, so dropping the columns fires nothing. This also drops the vendor allow-list.
 DROP TRIGGER IF EXISTS partner_rfp_inbox_link_columns_guard ON public.partner_rfp_inbox;
 DROP TRIGGER IF EXISTS rfp_magic_tokens_link_columns_guard  ON public.rfp_magic_tokens;
 DROP FUNCTION IF EXISTS public.partner_rfp_inbox_link_columns_guard();

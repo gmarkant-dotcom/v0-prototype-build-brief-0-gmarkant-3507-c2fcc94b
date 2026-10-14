@@ -18,7 +18,8 @@
 --   CREATE FUNCTION + TRIGGER rfp_record_lines_guard                 (lead_org_id from parent, rfp_id pinned, D5)
 --   ALTER TABLE partner_rfp_inbox ADD rfp_line_id, client_name_released          (nullable, no backfill)
 --   ALTER TABLE rfp_magic_tokens ADD rfp_line_id, attached_inbox_id, client_name_released (nullable)
---   CREATE FUNCTION + TRIGGER partner_rfp_inbox_link_columns_guard   (110's shape)
+--   CREATE FUNCTION + TRIGGER partner_rfp_inbox_link_columns_guard   (110's shape, plus the vendor
+--                                                                     allow-list, rulings O1/O2)
 --   CREATE FUNCTION + TRIGGER rfp_magic_tokens_link_columns_guard    (110's shape)
 --   GRANTS: both new tables REVOKE ALL FROM PUBLIC, anon, authenticated; GRANT SELECT, INSERT,
 --           UPDATE TO authenticated; GRANT ALL TO service_role. Nothing else.
@@ -35,6 +36,10 @@
 -- >>> rows now also returns rfp_line_id and client_name_released (both NULL until 119 / step C).
 -- >>> rfp_line_id is an opaque id into a table no vendor can read. The paths are listed in
 -- >>> docs/rfp-record-a-report.md section 5. No vendor path selects whole rfp_magic_tokens rows.
+--
+-- >>> AND ONE VENDOR-VISIBLE REFUSAL, RULED BY THE OWNER (O1, O2): a vendor UPDATE of
+-- >>> partner_rfp_inbox that changes any column outside the allow-list now fails with 42501. Every
+-- >>> vendor write the application makes is on the list (header section THE VENDOR ALLOW-LIST).
 --
 -- THE FULL FILENAME IS 118_rfp_records.sql. Its rollback sibling is 118_rfp_records_down.sql.
 -- DO NOT GLOB.
@@ -87,7 +92,8 @@
 -- =====================================================================
 --
 -- BEFORE INSERT OR UPDATE, FOR EACH ROW, plpgsql, SECURITY INVOKER, search_path pinned, EXECUTE
--- revoked from PUBLIC, anon and authenticated. Three rules:
+-- revoked from PUBLIC, anon and authenticated. Three rules here (the inbox guard adds rule (4),
+-- the vendor allow-list, in the next header section):
 --
 --   (1) The link columns (rfp_line_id, client_name_released, and on tokens attached_inbox_id) may be
 --       set or changed only by a member of the row's lead organization (partner_rfp_inbox.lead_org_id,
@@ -102,10 +108,7 @@
 --   (3) attached_inbox_id must reference an inbox row of the same lead organization. 23514. Same
 --       trigger points as (2).
 --
--- VENDORS KEEP EVERY OTHER UPDATE THEY HAVE TODAY. A vendor write that leaves the link columns as
--- they are (viewed_at, partner_intent, intent_set_at, nda_confirmed_at, agency_nda_notified_at,
--- claimed_at, vendor_org_id, the 'bid_submitted' status) returns on the first test and is judged by
--- the 099 policy exactly as before. The pre-apply test proves it (K3, K4, K5).
+-- The inbox guard carries a fourth rule, the vendor allow-list: see the next header section.
 --
 -- THE TRUSTED-PATH TEST: auth.uid() IS NULL AND current_user NOT IN ('anon', 'authenticated').
 -- auth.uid() IS NULL is 091's chosen exemption (091:173-205: a service-role JWT carries no sub). The
@@ -117,6 +120,42 @@
 -- (2) and (3) read rfp_record_lines / partner_rfp_inbox under the CALLER's row level security. For
 -- the service role that is the whole table; for an agency member it is its own organization's rows;
 -- a row the caller cannot see is refused exactly like a row of another organization.
+--
+-- =====================================================================
+-- THE VENDOR ALLOW-LIST ON partner_rfp_inbox (OWNER RULINGS O1 AND O2, 2026-10-14). CLOSES F1.
+-- =====================================================================
+--
+-- F1 (found 2026-10-14, docs/rfp-record-a-report.md sections 6 and 8): the 099 vendor UPDATE policy
+-- constrains vendor_org_id (clause B) and status (clause C) and nothing else, so a vendor could
+-- rewrite its own row's lead_org_id, master_rfp_json (the rubric included), estimated_budget,
+-- project_id, scope_item_id and every other column through raw PostgREST. The owner found no sign
+-- of exploitation across the 97 inbox rows on 2026-10-14.
+--
+-- Rule (4) of partner_rfp_inbox_link_columns_guard, on UPDATE only. It applies when the caller is
+-- NOT on the trusted path (the same test as rule (1)) AND is NOT a member of the row's lead
+-- organization both BEFORE and AFTER the write (the same current_user_org_ids() test as rule (1)).
+-- For that caller it compares to_jsonb(OLD) and to_jsonb(NEW) minus the allow-list; any remaining
+-- difference raises 42501 naming the first offending column (alphabetical). DENY BY DEFAULT: a
+-- column added to partner_rfp_inbox later is refused for vendors without touching this guard.
+--
+--   O1 ALWAYS ALLOWED: status, updated_at, viewed_at, partner_intent, intent_set_at,
+--      agency_nda_notified_at. (status stays under 099 clause C: only 'bid_submitted', never out
+--      of 'closed' or 'not_selected'.)
+--   O2 THE CLAIM, ALSO ALLOWED, ONLY WHEN ALL HOLD: OLD.vendor_org_id IS NULL (unclaimed),
+--      NEW.vendor_org_id IN current_user_org_ids() (099 clause B's test), and NEW.claimed_at is
+--      non-NULL and differs from OLD.claimed_at (set in the same update). Then vendor_org_id and
+--      claimed_at may change too. Once vendor_org_id is set a vendor can never change vendor_org_id
+--      or claimed_at again: this closes the gap 099:783-790 names (moving a claimed row between
+--      two of the caller's organizations).
+--
+-- The vendor-session writers this admits (docs/rfp-record-a-report.md section 8a):
+--   app/api/partner/rfps/[id]/route.ts:71-78               viewed_at
+--   app/api/partner/rfps/[id]/intent/route.ts:92-99        partner_intent, intent_set_at
+--   app/api/partner/rfps/[id]/nda-notify/route.ts:115-118  agency_nda_notified_at, updated_at
+--   app/api/partner/rfps/[id]/response/route.ts:380-383    status 'bid_submitted', updated_at
+--   app/api/partner/rfps/claim/route.ts:76-84              vendor_org_id, claimed_at, updated_at (O2)
+-- The 099 policy text is not touched: its clauses still apply on top of this rule, and so do
+-- rules (1) and (2). The lead agency's own updates and the service role are not affected.
 --
 -- =====================================================================
 -- ADJUSTMENTS TO THE DESIGN SKETCH (docs/rfp-source-of-truth-design.md section 1), STATED
@@ -144,8 +183,9 @@
 --   [ ] 117 is applied (2026-10-14). 118 does not depend on it; the numbering does.
 --   [ ] P1 to P3 below answer EXPECTED. The transaction ENFORCES P1 and P2 (LG118).
 --   [ ] The pre-apply test's first line reads "SAFE TO APPLY 118." It is also the parse check.
---       Its INCONCLUSIVE-BY-DESIGN rows (U1, U2, X1, X2: no unpaid or second lead agency exists)
---       are expected and named in its headline.
+--       Its INCONCLUSIVE-BY-DESIGN rows (U1, U2, X1, X2: no unpaid or second lead agency exists;
+--       C3: no user outside the lead organization belongs to two organizations) are expected and
+--       named in its headline. C3 runs and is judged normally if such a user exists.
 --   [ ] The DRY RUN has been done and PROVED to have rolled back (P2 still answers zero rows).
 --   [ ] The step A code (feat/rfp-record-a) is deployed, or main is deployed: main never names the
 --       new tables or columns, and the step A code skips them on 42P01 / PGRST205 / 42703 / PGRST204.
@@ -274,11 +314,11 @@
 --   created_by 'n'; rfp_record_lines rfp_id 'c'; partner_rfp_inbox rfp_line_id 'a';
 --   rfp_magic_tokens rfp_line_id 'a', attached_inbox_id 'n'.
 --
--- BEGIN and COMMIT line numbers of the transaction below:
--- BEGIN is at line 280 and COMMIT is at line 845.
+-- BEGIN, COMMIT and body-marker line numbers of the transaction below (BODY START 321, BODY END 923):
+-- BEGIN is at line 320 and COMMIT is at line 924.
 
 BEGIN;
-
+-- >>> 118 BODY START
 -- ---------------------------------------------------------------------
 -- 0. FAIL-CLOSED PRE-FLIGHT, INSIDE THE TRANSACTION.
 -- ---------------------------------------------------------------------
@@ -699,7 +739,8 @@ COMMENT ON COLUMN public.rfp_magic_tokens.client_name_released IS
 
 
 -- ---------------------------------------------------------------------
--- 8. THE LINK-COLUMN GUARDS. See the header section of that name for the three rules.
+-- 8. THE LINK-COLUMN GUARDS. See the header section of that name for the three rules, and THE
+--    VENDOR ALLOW-LIST for the inbox guard's rule (4).
 -- ---------------------------------------------------------------------
 CREATE FUNCTION public.partner_rfp_inbox_link_columns_guard()
 RETURNS trigger
@@ -707,9 +748,14 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_changed  boolean;
-  v_trusted  boolean;
-  v_line_org uuid;
+  v_changed   boolean;
+  v_trusted   boolean;
+  v_line_org  uuid;
+  -- Rule (4), ruling O1: the columns a vendor may change. Everything else is refused for a vendor,
+  -- including any column added to this table later.
+  v_vendor_ok text[] := ARRAY['status', 'updated_at', 'viewed_at', 'partner_intent', 'intent_set_at',
+                              'agency_nda_notified_at'];
+  v_offending text;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     v_changed := NEW.rfp_line_id IS NOT NULL OR NEW.client_name_released IS NOT NULL;
@@ -743,6 +789,35 @@ BEGIN
     END IF;
   END IF;
 
+  -- (4) THE VENDOR ALLOW-LIST (rulings O1 and O2). Anyone who is not a member of the row's lead
+  -- organization before AND after the write, and is not on the trusted path, is a vendor here.
+  IF TG_OP = 'UPDATE' AND NOT v_trusted
+     AND NOT (coalesce(OLD.lead_org_id IN (SELECT public.current_user_org_ids()), false)
+              AND coalesce(NEW.lead_org_id IN (SELECT public.current_user_org_ids()), false)) THEN
+    -- O2, the claim: an unclaimed row, claimed for one of the caller's own organizations (099
+    -- clause B's test), with claimed_at set in the same update. Never once vendor_org_id is set.
+    IF OLD.vendor_org_id IS NULL
+       AND coalesce(NEW.vendor_org_id IN (SELECT public.current_user_org_ids()), false)
+       AND NEW.claimed_at IS NOT NULL
+       AND NEW.claimed_at IS DISTINCT FROM OLD.claimed_at THEN
+      v_vendor_ok := v_vendor_ok || ARRAY['vendor_org_id', 'claimed_at'];
+    END IF;
+
+    SELECT o.key
+      INTO v_offending
+      FROM jsonb_each(to_jsonb(OLD) - v_vendor_ok) o
+      LEFT JOIN jsonb_each(to_jsonb(NEW) - v_vendor_ok) n ON n.key = o.key
+     WHERE n.value IS DISTINCT FROM o.value
+     ORDER BY o.key
+     LIMIT 1;
+
+    IF v_offending IS NOT NULL THEN
+      RAISE EXCEPTION 'A vendor cannot change partner_rfp_inbox.%.', v_offending
+        USING ERRCODE = '42501',
+              DETAIL  = 'Vendors may change status, updated_at, viewed_at, partner_intent, intent_set_at and agency_nda_notified_at, and may claim an unclaimed row for their own organization (vendor_org_id with claimed_at). Nothing else (migration 118, rulings O1 and O2).';
+    END IF;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -751,7 +826,11 @@ COMMENT ON FUNCTION public.partner_rfp_inbox_link_columns_guard() IS
   'Migration 118. BEFORE INSERT OR UPDATE on partner_rfp_inbox: rfp_line_id and client_name_released '
   'may be set or changed only by a member of the row''s lead organization (before and after the write) '
   'or a trusted path with no session (42501); rfp_line_id must reference a line of the same lead '
-  'organization (23514). Every other write, every vendor write included, passes untouched.';
+  'organization (23514). VENDOR ALLOW-LIST (rulings O1, O2): on UPDATE, a caller who is neither on '
+  'the trusted path nor a member of the lead organization before and after may change only status, '
+  'updated_at, viewed_at, partner_intent, intent_set_at, agency_nda_notified_at, plus vendor_org_id '
+  'and claimed_at when claiming an unclaimed row for one of its own organizations with claimed_at set. '
+  'Any other change raises 42501 naming the column. Deny by default: new columns are refused too.';
 
 CREATE TRIGGER partner_rfp_inbox_link_columns_guard
   BEFORE INSERT OR UPDATE ON public.partner_rfp_inbox
@@ -841,5 +920,5 @@ REVOKE EXECUTE ON FUNCTION public.rfp_magic_tokens_link_columns_guard() FROM aut
 
 -- PostgREST must see the tables and columns at commit.
 NOTIFY pgrst, 'reload schema';
-
+-- <<< 118 BODY END
 COMMIT;
