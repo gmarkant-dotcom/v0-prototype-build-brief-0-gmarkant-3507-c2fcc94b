@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { agencyGateRefusal } from "@/lib/api-auth"
 import { recordMilestone } from "@/lib/milestone-events"
+import { agencyEstimateFor, readLineEstimatedBudgets } from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
 
@@ -166,7 +167,7 @@ export async function GET() {
       if (inboxIds.length > 0) {
         const { data: inboxRows, error: inboxErr } = await supabase
           .from("partner_rfp_inbox")
-          .select("id, project_id, partnership_id, scope_item_name, estimated_budget")
+          .select("id, project_id, partnership_id, scope_item_name, estimated_budget, rfp_line_id")
           .in("lead_org_id", callerOrgIds)
           .in("id", inboxIds)
 
@@ -180,12 +181,26 @@ export async function GET() {
           return NextResponse.json({ error: "Failed to load awarded bids" }, { status: 500, headers: noStore })
         }
 
+        // Step C: the agency's own estimate, from its RFP record line for a linked row
+        // (partner_rfp_inbox.estimated_budget is the vendor's released figure since step C).
+        const lineEstimates = await readLineEstimatedBudgets(
+          supabase,
+          "GET /api/agency/msa/milestones",
+          (inboxRows || []).map((row) => row.rfp_line_id as string | null),
+          callerOrgIds
+        )
         for (const row of inboxRows || []) {
           inboxById.set(row.id as string, {
             project_id: row.project_id != null ? String(row.project_id) : null,
             partnership_id: row.partnership_id != null ? String(row.partnership_id) : null,
             scope_item_name: (row.scope_item_name as string | null) ?? null,
-            estimated_budget: (row.estimated_budget as string | null) ?? null,
+            estimated_budget: agencyEstimateFor(
+              {
+                rfp_line_id: (row.rfp_line_id as string | null) ?? null,
+                estimated_budget: (row.estimated_budget as string | null) ?? null,
+              },
+              lineEstimates
+            ),
           })
         }
       }

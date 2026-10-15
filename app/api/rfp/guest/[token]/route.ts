@@ -8,7 +8,7 @@ import { normalizeBudgetCategories, normalizeBudgetLines } from "@/lib/budget-ca
 import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
-import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { markBidSummaryPending } from "@/lib/bid-summary-generation"
 import { selectVendorResponse } from "@/lib/server/rfp-response-private"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
@@ -162,10 +162,11 @@ function getServiceSupabase() {
 // reference_materials.output_template_config, org_id, project_id, response_id, pool_status,
 // domain_match_profile_id (another company's profile id), and the token itself.
 //
-// Owner rulings applied here (2026-10-12): the client name is hidden from vendors unless an RFP
-// turns it on, and no per-RFP toggle exists yet, so it is never sent. A vendor sees only the
-// budget released for its own scope line; projects.budget_range is the whole project's figure
-// and no per-line release exists on the token, so it is never sent either.
+// Owner rulings applied here (2026-10-12, D2/D3): the client name is hidden from vendors unless an
+// RFP turns it on. Step C: it is sent only from rfp_magic_tokens.client_name_released, which the
+// agency's per-RFP toggle sets (118/119), never from projects.client_name. A vendor sees only the
+// budget released for its own scope line; projects.budget_range is the whole project's figure and
+// the token carries no per-line release, so no budget is sent.
 // ---------------------------------------------------------------------------------------------
 
 /** Base token columns, present since before the migration log (057-070). */
@@ -187,8 +188,13 @@ const GUEST_TOKEN_BASE_COLUMNS = [
   "created_at",
 ] as const
 
-/** 072, 074, 076. Applied, but dropped on 42703 so a database without them still serves the link. */
-const GUEST_TOKEN_OPTIONAL_COLUMNS = ["budget_categories", "response_deadline", "close_bidding_at_deadline"] as const
+/** 072, 074, 076, 118. Applied, but dropped on 42703 so a database without them still serves the link. */
+const GUEST_TOKEN_OPTIONAL_COLUMNS = [
+  "budget_categories",
+  "response_deadline",
+  "close_bidding_at_deadline",
+  "client_name_released",
+] as const
 
 type GuestTokenRow = {
   token: string
@@ -209,6 +215,7 @@ type GuestTokenRow = {
   budget_categories?: unknown
   response_deadline?: string | null
   close_bidding_at_deadline?: boolean | null
+  client_name_released?: string | null
 }
 
 async function selectGuestToken(
@@ -358,7 +365,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 
     // Project/agency/scope-item context is needed for the "RFP Details" tab regardless of
     // whether a bid has already been submitted, so fetch it up front for both branches.
-    // No id, client_name or budget_range: see "WHAT A GUEST RECEIVES" above.
+    // No id, projects.client_name or budget_range: see "WHAT A GUEST RECEIVES" above.
     const [{ data: project, error: projectErr }, { data: agency, error: agencyErr }] = await Promise.all([
       supabase
         .from("projects")
@@ -396,6 +403,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     const projectView = project
       ? {
           name: project.name ?? null,
+          // Step C: the released client name only (null unless the agency shows it, D3).
+          client_name: tokenRow.client_name_released ?? null,
           description: project.description ?? null,
           start_date: project.start_date ?? null,
           end_date: project.end_date ?? null,
@@ -656,14 +665,11 @@ export async function POST(req: Request) {
         console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
       }
 
-      // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, orgIdsFromColumns(tokenRow.org_id)).catch((err) => {
-        console.error("[api] fire-and-forget summary generation failed", {
-          route,
-          responseId: tokenRow.response_id,
-          message: err instanceof Error ? err.message : String(err),
-        })
-      })
+      // RULING S-A (2026-10-14): no AI summary is generated on a guest request. The revised bid's
+      // old summary describes the old bid, so it is marked pending (ai_summary_generated_at NULL)
+      // and the agency's bids page regenerates it through the agency route, which reads the RFP
+      // record. Nothing else is read or written.
+      await markBidSummaryPending(supabase, tokenRow.response_id as string, orgIdsFromColumns(tokenRow.org_id))
 
       // Guest revisions previously sent no agency notification at all (email or in-app) -
       // the mirror-image gap of the portal path, which only notified on revision, not on
@@ -772,14 +778,9 @@ export async function POST(req: Request) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
     }
 
-    // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-    void generateAndSaveBidSummary(supabase, saved.id as string, orgIdsFromColumns(tokenRow.org_id)).catch((err) => {
-      console.error("[api] fire-and-forget summary generation failed", {
-        route,
-        responseId: saved.id,
-        message: err instanceof Error ? err.message : String(err),
-      })
-    })
+    // RULING S-A (2026-10-14): no AI summary is generated on a guest request. The bid saves with
+    // its summary pending (no private row, ai_summary_generated_at NULL); the agency's bids page
+    // generates it through the agency route, which reads the RFP record.
 
     // Partner-pool auto-classification (magic link auto-add). Must never block or fail
     // the bid submission response - any failure here is logged loudly and swallowed.

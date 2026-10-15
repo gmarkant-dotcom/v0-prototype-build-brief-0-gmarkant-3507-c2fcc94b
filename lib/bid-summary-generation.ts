@@ -34,21 +34,25 @@ export type BidSummaryGenerationResult =
  * fails closed rather than silently reading another organization's rows.
  */
 /**
- * Shared by the agency-facing generate-summary endpoint AND the fire-and-forget
- * calls from the partner/guest bid submission handlers - callers are responsible
- * for their own auth (this function does not re-check it).
+ * RULING S-A (2026-10-14). The AI bid summary is generated ONLY through the agency's
+ * generate-summary route (app/api/agency/bids/[responseId]/generate-summary), on the agency's
+ * session after G1, which reads the agency's RFP record (step B). A vendor or guest submission no
+ * longer generates one: those requests run where the record must not be read (D1). The bid saves
+ * with its summary PENDING, which is ai_summary_generated_at NULL (no new column); the agency bids
+ * page generates pending summaries in the background on load, and the bid detail and compare views
+ * generate on demand.
+ *
+ * Callers are responsible for their own auth (this function does not re-check it).
  *
  * 109: the summary is written to partner_rfp_response_private, which has no vendor policy.
- * The client passed in must therefore be the agency's session or the service role, never a
- * vendor session: app/api/partner/rfps/[id]/response passes the service role for that reason.
+ * The client passed in must therefore be the agency's session, never a vendor session.
  */
 export async function generateAndSaveBidSummary(
   supabase: SupabaseClient,
   responseId: string,
   orgIds: readonly OrgId[],
-  /** STEP B. "session" only from the agency generate-summary route (G1, session client). The
-   *  vendor- and guest-triggered calls pass nothing: they run on the service role after a request
-   *  the agency gate never saw, so they stay on today's reads ("skip"). */
+  /** STEP B. "session" from the agency generate-summary route (G1, session client), its only
+   *  caller since ruling S-A. "skip" reads no record. */
   recordMode: RecordReadMode = "skip"
 ): Promise<BidSummaryGenerationResult> {
   const ctx = await loadBidAnalysisContext(supabase, responseId, orgIds, recordMode)
@@ -112,18 +116,7 @@ export async function generateAndSaveBidSummary(
 
   let updated: ResponsePrivate
   try {
-    const read = await readResponsePrivate(supabase, orgIds, [responseId])
-    let legacy: Record<string, unknown> | null = null
-    if (!read.available) {
-      const { data } = await supabase
-        .from("partner_rfp_responses")
-        .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
-        .eq("id", responseId)
-        .in("lead_org_id", orgIds)
-        .maybeSingle()
-      legacy = (data as Record<string, unknown> | null) ?? null
-    }
-    updated = resolveResponsePrivate(legacy, read, responseId)
+    updated = await readBidSummary(supabase, responseId, orgIds)
   } catch (readErr) {
     console.error("[bid-summary-generation] saved, but reading it back failed", {
       responseId,
@@ -139,5 +132,63 @@ export async function generateAndSaveBidSummary(
     ai_summary_generated_at: updated.ai_summary_generated_at,
     short_failed: !shortResult.success,
     detailed_failed: !detailedResult.success,
+  }
+}
+
+/** The bid's current summary fields (109's private table, or the legacy columns before it). Throws on a read error. */
+export async function readBidSummary(
+  supabase: SupabaseClient,
+  responseId: string,
+  orgIds: readonly OrgId[]
+): Promise<ResponsePrivate> {
+  const read = await readResponsePrivate(supabase, orgIds, [responseId])
+  let legacy: Record<string, unknown> | null = null
+  if (!read.available) {
+    const { data } = await supabase
+      .from("partner_rfp_responses")
+      .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
+      .eq("id", responseId)
+      .in("lead_org_id", orgIds)
+      .maybeSingle()
+    legacy = (data as Record<string, unknown> | null) ?? null
+  }
+  return resolveResponsePrivate(legacy, read, responseId)
+}
+
+/** Ruling S-A: a summary is complete when both the one-line and the detailed analysis exist.
+ *  Anything less (never generated, or a half that failed) is generated again on request. */
+export function isBidSummaryComplete(s: Pick<ResponsePrivate, "ai_summary_short" | "ai_summary_detailed">): boolean {
+  return Boolean(s.ai_summary_short && s.ai_summary_detailed)
+}
+
+/**
+ * Ruling S-A: a REVISED bid's old summary describes the old bid. A vendor or guest resubmission
+ * therefore marks it pending again (all three fields NULL) so the agency's bids page regenerates
+ * it. Writes nothing else and reads nothing: no RFP record, no rubric. `client` must be the
+ * service role (109's table has no vendor policy), scoped to the bid's lead organization. Never
+ * throws; a failure is logged and leaves the old summary in place.
+ */
+export async function markBidSummaryPending(
+  client: SupabaseClient,
+  responseId: string,
+  leadOrgIds: readonly OrgId[]
+): Promise<void> {
+  try {
+    const { error } = await writeResponsePrivate(client, leadOrgIds, responseId, {
+      ai_summary_short: null,
+      ai_summary_detailed: null,
+      ai_summary_generated_at: null,
+    })
+    if (error) {
+      console.error("[bid-summary-generation] could not mark the summary pending after a revision", {
+        responseId,
+        message: error.message,
+      })
+    }
+  } catch (err) {
+    console.error("[bid-summary-generation] marking the summary pending threw", {
+      responseId,
+      message: err instanceof Error ? err.message : String(err),
+    })
   }
 }

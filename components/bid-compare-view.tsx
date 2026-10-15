@@ -29,6 +29,7 @@ import { HelpTerm } from "@/components/help-term"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
+import { requestBidSummary, useBidSummaryStatus } from "@/lib/bid-summary-queue"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
@@ -84,6 +85,35 @@ function businessCriteriaCounts(row: BidRow): { required: number; missing: numbe
   return { required: requiredCount, missing: missingCount }
 }
 
+/**
+ * Ruling S-A. One bid's short summary in the At a Glance table, from the shared summary queue. A
+ * bid with no summary yet reads "Generating summary" until its call settles (the view requests it
+ * on mount), then the summary, or "Summary unavailable" with Retry. Never a blank.
+ */
+function CompareSummaryCell({ row }: { row: BidRow }) {
+  const status = useBidSummaryStatus(row.id)
+  const summary = row.ai_summary_short || status.fields?.ai_summary_short || null
+  if (summary) return <>{summary}</>
+  if (status.error || (status.fields && !status.generating)) {
+    return (
+      <span className="flex items-center gap-2 font-mono text-2xs text-red-300">
+        Summary unavailable
+        <button type="button" onClick={() => void requestBidSummary(row.id)} className="underline hover:text-red-200">
+          Retry
+        </button>
+      </span>
+    )
+  }
+  if (!row.response_exists) return <>Not generated yet</>
+  return (
+    <div className="space-y-1.5 max-w-[200px]">
+      <p className="font-mono text-2xs text-foreground-muted">Generating summary...</p>
+      <Skeleton className="h-2.5 w-full bg-white/10" />
+      <Skeleton className="h-2.5 w-2/3 bg-white/10" />
+    </div>
+  )
+}
+
 export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[]; onBack: () => void }) {
   const [rows, setRows] = useState(initialRows)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -100,8 +130,6 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const [comparisonError, setComparisonError] = useState<string | null>(null)
   const [comparisonRequested, setComparisonRequested] = useState(false)
 
-  const [generatingSummaryIds, setGeneratingSummaryIds] = useState<Set<string>>(new Set())
-
   const [evaluateQueue, setEvaluateQueue] = useState<BidRow[] | null>(null)
   const [evaluateIndex, setEvaluateIndex] = useState(0)
 
@@ -117,49 +145,14 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
     [rows]
   )
 
-  // At a Glance renders instantly from already-loaded data; missing AI short summaries
-  // are backfilled in parallel afterward without blocking the rest of the table.
+  // At a Glance renders instantly from already-loaded data; missing AI short summaries are
+  // generated on demand afterward without blocking the rest of the table. Ruling S-A: through the
+  // shared queue (lib/bid-summary-queue.ts), so a bid the bids page is already warming up joins
+  // that call. This view holds no summary state of its own: each cell (CompareSummaryCell) reads
+  // the queue, shows "Generating summary" while it runs and Retry if it fails, never a blank.
   useEffect(() => {
-    const missingSummaryIds = initialRows.filter((r) => !r.ai_summary_short).map((r) => r.id)
-    if (missingSummaryIds.length === 0) return
-    setGeneratingSummaryIds(new Set(missingSummaryIds))
-    let cancelled = false
-    Promise.all(
-      missingSummaryIds.map(async (id) => {
-        try {
-          const res = await fetch(`/api/agency/bids/${id}/generate-summary`, { method: "POST" })
-          const data = await res.json().catch(() => ({}))
-          if (res.ok && !cancelled) {
-            setRows((prev) =>
-              prev.map((r) =>
-                r.id === id
-                  ? {
-                      ...r,
-                      ai_summary_short: data.ai_summary_short ?? r.ai_summary_short,
-                      ai_summary_detailed: data.ai_summary_detailed ?? r.ai_summary_detailed,
-                      ai_summary_generated_at: data.ai_summary_generated_at ?? r.ai_summary_generated_at,
-                    }
-                  : r
-              )
-            )
-          }
-        } catch {
-          // Leave ai_summary_short null - the row falls back to "Not generated yet".
-        } finally {
-          if (!cancelled) {
-            setGeneratingSummaryIds((prev) => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            })
-          }
-        }
-      })
-    ).then(() => {
-      if (!cancelled) void mutate(RFP_RESPONSES_URL)
-    })
-    return () => {
-      cancelled = true
+    for (const r of initialRows) {
+      if (!r.ai_summary_short) void requestBidSummary(r.id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -582,14 +575,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 <TableCell className="text-foreground-muted font-mono text-2xs uppercase align-top">AI Summary</TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id} className="whitespace-normal text-xs text-foreground/80 align-top">
-                    {generatingSummaryIds.has(row.id) ? (
-                      <div className="space-y-1.5 max-w-[200px]">
-                        <Skeleton className="h-2.5 w-full bg-white/10" />
-                        <Skeleton className="h-2.5 w-2/3 bg-white/10" />
-                      </div>
-                    ) : (
-                      row.ai_summary_short || "Not generated yet"
-                    )}
+                    <CompareSummaryCell row={row} />
                   </TableCell>
                 ))}
               </TableRow>

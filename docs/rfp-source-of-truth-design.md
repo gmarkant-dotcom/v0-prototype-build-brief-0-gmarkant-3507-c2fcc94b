@@ -1,5 +1,11 @@
 # Agency-owned RFP record: design only, 2026-10-12
 
+> **UPDATED 2026-10-15 (feat/rfp-record-c).** **119 is applied and verified (2026-10-14).** **Step C and
+> migration 120 are authored on `feat/rfp-record-c`** (120 NOT applied): section 9 below records them as
+> built, including the owner's ruling S-A (no AI bid summary on a vendor or guest submission), the one
+> vendor-copy allow-list, the per-table allow-list for the token, and where the released budget lives on the
+> vendor's row. Report: `docs/rfp-record-c-report.md`.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-b).** **118 is applied and catalog-verified (2026-10-14); F1 is
 > closed in production.** **Step B and migration 119 are authored on `feat/rfp-record-b`** (119 NOT
 > applied): section 8 below records them as built, the provenance rule, one deliberate departure from
@@ -396,4 +402,65 @@ inbox row and sets neither `rfp_line_id` nor `attached_inbox_id`:
 | Portal claim (broadcast invite token) | `app/api/partner/rfps/claim/route.ts:76-84` | n/a: claims a broadcast inbox row, not a magic token |
 
 Until step C changes these, the readers fall back to the `_magic_token` join for such rows, and 119
-links whatever exists at apply time.
+links whatever exists at apply time. (Step C changed all three: section 9c.)
+
+## 9. As built in step C and 120 (2026-10-15, `feat/rfp-record-c`)
+
+### 9a. One vendor-copy allow-list
+
+`lib/rfp-vendor-copy.ts` holds the only allow-list of top-level keys a vendor copy
+(`partner_rfp_inbox.master_rfp_json`) may carry: `projectName`, `overview`, `objectives`, `timeline`,
+`business_criteria_required`, `budget_categories`, `nda_link`, `response_deadline`. Removed: `client`,
+`totalBudget`, `scopeItems`, `evaluation_criteria`, `referenceMaterials`, `_magic_token` (D8), and any key
+added later (deny by default). `buildVendorCopy(record, line)` is the one place a writer builds a vendor row:
+the allow-listed JSON, `estimated_budget` = the line's **released** budget (D2; NULL when hidden), and
+`client_name_released` = the record's client name only when `show_client_to_vendors` (D3).
+
+**Where the released budget lives (departure from section 1).** 118 added `client_name_released` on the
+vendor's row and the token but no released-budget column; `released_budget` is only on
+`rfp_record_lines`, which vendors cannot read (D1). From step C on, the existing per-line column
+`partner_rfp_inbox.estimated_budget` carries the release. 119 backfilled released = estimated, so every
+backfilled row already holds its release there. The three agency readers of that column (utilization,
+MSA milestones, MSA AI schedule) read the agency's estimate from the record line for linked rows
+(`lib/server/rfp-record.ts` `readLineEstimatedBudgets`, `agencyEstimateFor`).
+
+**The token.** `rfp_magic_tokens` is agency-only by RLS; a guest reads it only through the guest API's
+explicit view. Its one object-shaped column a guest path reads, `reference_materials`, has its own
+allow-list, `materials` (`output_template_config` lives on the record, D9). Its whole-value columns are not
+scrubbed.
+
+### 9b. Readers
+
+Every vendor and guest read of the inbox uses an explicit column list (`VENDOR_INBOX_LIST_COLUMNS`,
+`VENDOR_INBOX_DETAIL_COLUMNS`; never `scope_item_id` or the invite token), takes the client name only from
+`client_name_released` (list, detail, bids, dashboard queue, guest page), and the detail narrows the copy
+with `pickVendorCopy()` before returning it, so old copies are harmless before 120. The RFP page no longer
+renders a client, a programme budget or other lines from the copy. The Lightning invitation email names
+the client and a budget only when released. Notifications carry no `magicToken` (D8).
+
+### 9c. Joins and attach
+
+Every token-to-row join is `rfp_magic_tokens.attached_inbox_id`. The agency's `_magic_token` fallback
+(`app/api/agency/rfp-responses/[id]/route.ts`) is removed. `attachMagicTokenToPartnerInbox` (all four
+callers, service role) finds the row by `attached_inbox_id`, else by the bid's own `inbox_item_id`, else
+inserts one carrying the token's line and released client name, and claims it with a compare-and-set on
+`attached_inbox_id` while NULL; a racing duplicate removes itself. 118's guard admits this on its trusted
+path and checks line and organization; no guard changed.
+
+### 9d. Ruling S-A, the AI bid summary
+
+No summary is generated on a vendor or guest submission. Pending = `ai_summary_generated_at` NULL (no new
+column); a revision marks the old summary pending. The agency route is idempotent (a complete summary is
+answered from storage unless `force`), and `lib/bid-summary-queue.ts` is the one client path: the bids page
+warms pending summaries up on load (at most 2 at a time), an opened bid generates on demand and joins a
+running call, and every view shows "Generating summary" while it runs and Retry on failure.
+
+### 9e. Migration 120
+
+`120_rfp_vendor_copy_scrub.sql`: the two allow-list functions (the only copy of each list in the
+migration), a fail-closed pre-flight (LG120: 118's trusted path and guards, 119 has run, no linked row on a
+missing line, no non-object copy, no removed value a linked row's record does not hold, no lost join to a
+live token, only the refused row `04391718` may lose a value), the scrub of the two JSON columns only, and
+BEFORE INSERT OR UPDATE guards on both tables for every role (23514). No policy or grant change. Idempotent.
+The down file drops the guard only; the scrub cannot be restored from it (the records hold the truth).
+Pre-apply test: 29 assertions, none INCONCLUSIVE by design.

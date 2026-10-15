@@ -18,6 +18,7 @@ import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
+import { buildVendorCopy, type VendorCopyRecord } from "@/lib/rfp-vendor-copy"
 import {
   broadcastRecordFieldsSchema,
   createRfpRecordDraft,
@@ -204,6 +205,20 @@ export async function POST(request: NextRequest) {
       profile?.company_name?.trim() || profile?.full_name?.trim() || "Lead agency"
     const baseUrl = siteBaseUrl()
 
+    // STEP C (leak #8): what a vendor may hold of this RFP. Every inbox row below is built through
+    // lib/rfp-vendor-copy.ts: the allow-listed keys only (no client, no program budget, no other
+    // line, no rubric), the line's RELEASED budget (D2) in estimated_budget, and the client name in
+    // client_name_released only when this RFP shows it (D3). The full master goes on the record.
+    const clientNameSnapshot =
+      verifiedProject?.client_name ??
+      (typeof (masterRfp as Record<string, unknown>).client === "string" ? ((masterRfp as Record<string, unknown>).client as string) : null)
+    const vendorCopyRecord: VendorCopyRecord = {
+      masterRfp: masterRfp as Record<string, unknown>,
+      ndaLink: ndaLink || null,
+      showClientToVendors,
+      clientNameSnapshot,
+    }
+
     const rows: Record<string, unknown>[] = []
     // Step A: one RFP record line per scope item, in the order the agency arranged them.
     const recordLines: RfpRecordLineInput[] = []
@@ -247,14 +262,16 @@ export async function POST(request: NextRequest) {
 
       // D2: hidden unless the agency released this line. Only an explicit true releases it.
       const releaseBudget = (item as BroadcastItem & { releaseBudget?: unknown }).releaseBudget === true
+      const releasedBudget = releaseBudget && estimatedBudget ? estimatedBudget : null
       recordLines.push({
         scopeItemKey: scopeItemId,
         scopeItemName,
         scopeItemDescription: scopeItemDescription || null,
         estimatedBudget: estimatedBudget || null,
-        releasedBudget: releaseBudget && estimatedBudget ? estimatedBudget : null,
+        releasedBudget,
         sortOrder: recordLines.length,
       })
+      const vendorCopy = buildVendorCopy(vendorCopyRecord, { releasedBudget })
 
       for (const partnerId of item.partnerIds || []) {
         if (typeof partnerId !== "string" || !partnerId.length) continue
@@ -302,11 +319,12 @@ export async function POST(request: NextRequest) {
           scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription || null,
-          estimated_budget: estimatedBudget || null,
+          estimated_budget: vendorCopy.estimated_budget,
           timeline: timeline || null,
           response_deadline: responseDeadline,
           close_bidding_at_deadline: closeBiddingAtDeadline,
-          master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
+          master_rfp_json: vendorCopy.master_rfp_json,
+          client_name_released: vendorCopy.client_name_released,
           agency_company_name: agencyDisplay,
           nda_gate_enforced: false,
           require_terms_disclosure: requireTermsDisclosure,
@@ -447,11 +465,12 @@ export async function POST(request: NextRequest) {
           scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription || null,
-          estimated_budget: estimatedBudget || null,
+          estimated_budget: vendorCopy.estimated_budget,
           timeline: timeline || null,
           response_deadline: responseDeadline,
           close_bidding_at_deadline: closeBiddingAtDeadline,
-          master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
+          master_rfp_json: vendorCopy.master_rfp_json,
+          client_name_released: vendorCopy.client_name_released,
           agency_company_name: agencyDisplay,
           invite_token: inviteToken,
           invite_token_expires_at: expiresAt,
@@ -559,8 +578,7 @@ export async function POST(request: NextRequest) {
         outputTemplateConfig: null,
         totalBudget: typeof normalizedMaster.totalBudget === "string" ? normalizedMaster.totalBudget : null,
         showClientToVendors,
-        clientNameSnapshot:
-          verifiedProject?.client_name ?? (typeof normalizedMaster.client === "string" ? normalizedMaster.client : null),
+        clientNameSnapshot,
         responseDeadline,
         closeBiddingAtDeadline,
         requireTermsDisclosure,
@@ -582,13 +600,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step A fallback: rfp_line_id does not exist before 118. Dropped and retried, logged once.
+    // Step A fallback: rfp_line_id and client_name_released do not exist before 118. Dropped and
+    // retried, logged once each.
     let insertRows = rows
     let { error: insertError } = await supabase.from("partner_rfp_inbox").insert(insertRows)
-    if (missingColumnName(insertError) === "rfp_line_id") {
-      logColumnMissingOnce(RECORD_SITE, "partner_rfp_inbox", "rfp_line_id")
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const missing = missingColumnName(insertError)
+      if (missing !== "rfp_line_id" && missing !== "client_name_released") break
+      logColumnMissingOnce(RECORD_SITE, "partner_rfp_inbox", missing)
       insertRows = insertRows.map((row) => {
-        const { rfp_line_id: _omitted, ...rest } = row
+        const { [missing]: _omitted, ...rest } = row
         return rest
       })
       ;({ error: insertError } = await supabase.from("partner_rfp_inbox").insert(insertRows))

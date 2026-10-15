@@ -2,7 +2,9 @@
 
 **For:** branch `feat/rfp-record-a` (step A code) and `supabase/migrations/118_rfp_records.sql`. Run on
 a preview or local build of the branch. Parts A to D are step A and 118 (118 is applied and verified,
-2026-10-14). **Parts E to G are step B and 119** (`feat/rfp-record-b`). Steps C and D are not built.
+2026-10-14). **Parts E to G are step B and 119** (`feat/rfp-record-b`; 119 applied and verified
+2026-10-14). **Parts I to L are step C and 120** (`feat/rfp-record-c`; 120 authored, NOT applied). Step D
+is not built.
 **Accounts:** agency `gmarkant@gmail.com` (the paid m a r k a n t lead agency); vendor
 `gmarkant@icloud.com` (April Partner Test Agency); a magic-link address with no account
 (`gmarkant+rfpa1@gmail.com`, lands in the agency inbox).
@@ -232,3 +234,108 @@ exactly as on `main`.
   drops the function. Then 119's P2 answers null, 0; V1's `wizard` and `magic_link` rows are unchanged;
   the toggle route answers 503 again (Part E holds). Lightning inbox rows 119 linked to an existing step
   A line keep that link (the down file's header says why).
+
+---
+
+## Part I. Step C code deployed, 120 NOT applied (`feat/rfp-record-c`)
+
+Step C changes what vendors see straight away: the vendor and guest screens read the client name only
+from `client_name_released` and the budget only from the row's released figure, and they never render
+the programme budget, other lines or the client from the vendor copy. Old copies still hold those keys
+until 120 runs; no vendor screen reads them. Use the test project from Part A (client `Example Client`,
+budget range `$40,000 - $60,000`). Accounts: agency **gmarkant@gmail.com**, vendor **gmarkant@icloud.com**.
+
+**Agency (gmarkant@gmail.com)**
+
+- **RI1** Wizard (`/agency`), test project: two scope lines with estimated budgets (`$10,000 - $12,000` and
+  `$20,000 - $25,000`). On line 1 tick **Release budget to this line's vendors**; leave line 2 unticked.
+  Leave **Show client name to vendors** unticked. The notes now read "Hidden by default. When on, vendors
+  on this line see its budget and nothing else of yours." and "Off by default. When on, vendors see this
+  RFP's client name." (no "next release"). Send line 1 and line 2 to the vendor.
+- **RI2** `/agency/bids`, panel **Client name on sent RFPs**: the note under each record reads "Vendors on
+  this RFP see the client name only while this is on. A change reaches them immediately."
+
+**Vendor (gmarkant@icloud.com)**
+
+- **RI3** `/partner/rfps`: both RFPs listed. No client name on either card, and grouping by client shows
+  no `Example Client` group.
+- **RI4** Open line 1's RFP: the scope section shows **Budget (scope line)** `$10,000 - $12,000` (released).
+  The master section shows the project name, overview, objectives and timeline only: **no "Client:",
+  no "Program budget (master)", no "All scope items (master RFP)"**. Business criteria required and the
+  budget-category bid form still render when the RFP has them.
+- **RI5** Open line 2's RFP: **no budget at all** (line 2 was not released). No client, no other line.
+- **RI6** Open an RFP sent **before** step C (any older RFP in the list): the same rules hold (no client
+  unless the agency turned it on, no programme budget, no other lines), even though its stored copy still
+  has them (120 not applied yet). Its scope budget shows only if the row carries one (backfilled RFPs
+  released their estimate, D2).
+- **RI7** Browser devtools, Network tab, reload `/partner/rfps`: the `/api/partner/rfps` response has no
+  `master_rfp_json`, no `estimated_budget`, no `scope_item_id`, no `invite_token`. Open an RFP: the
+  `/api/partner/rfps/<id>` response's `inbox.master_rfp_json` holds only projectName, overview, objectives,
+  timeline, business_criteria_required, budget_categories, nda_link, response_deadline (whichever exist).
+- **RI8** Submit a bid on line 1 (proposal, budget, timeline). It succeeds as before. Nothing about an AI
+  summary appears to the vendor.
+
+**Agency again**
+
+- **RI9** `/agency/bids` within a minute of RI8: the new bid's card shows **"Generating summary..."** with a
+  skeleton, then the one-line summary appears without opening the bid (the warm-up). Open the bid: the
+  AI Analysis section shows the detailed analysis, or **"Generating summary..."** while it finishes; never
+  "No analysis available yet" for a submitted bid, never a blank.
+- **RI10** Reload `/agency/bids`: the summary is still there and no new generation runs (the route answers
+  from storage; the card never flashes "Generating" for a bid that already has one). With several pending
+  bids, at most two generate at once (devtools: at most two `generate-summary` requests in flight).
+- **RI11** Card menu **Regenerate Summary**: a fresh summary replaces the old one (force).
+- **RI12** Tick **Show client name to vendors** on the RI1 record. Vendor reloads `/partner/rfps` and the
+  RFP: **`Client: Example Client`** shows on the card and the RFP immediately. Untick: gone on reload.
+- **RI13** Lightning RFP (`/agency/magic-rfp`) to the vendor's account address, client hidden, budget not
+  released. The invitation email reads "... has invited you to bid on <project>." with **no "for Example
+  Client" and no "Budget range"**. The vendor's portal shows the RFP with no client and no budget. The
+  vendor's in-app notification "New RFP in your inbox" is unchanged in wording.
+- **RI14** Revise the RI8 bid as the vendor (change the budget, resubmit). On `/agency/bids` the card shows
+  "Generating summary..." again, then a summary of the revised bid (a revision marks the old one pending).
+- **RI15** Guest link: send a Lightning RFP to `gmarkant+rfpc1@gmail.com` with **Show client name to
+  vendors** ticked. Open the link signed out: the RFP details show the client name under the project name;
+  no budget. Untick on the bids panel, reload the link: the client name is gone. Submit a guest bid: it
+  succeeds; the agency card shows "Generating summary..." then the summary.
+
+## Part J. Apply 120 (owner)
+
+- **RJ1** Run `supabase/sql-checks/120-key-inventory.sql`. Section 1: every key marked **REMOVE** on
+  `partner_rfp_inbox.master_rfp_json` is one of client, totalBudget, scopeItems, evaluation_criteria,
+  referenceMaterials, _magic_token (anything else: read it before going on). Section 2: C1, C2, C3, C6 are
+  0; C4 and C5 are 1 (inbox `04391718`). Write down C7, C8, C9 (findings, not changed by 120).
+- **RJ2** `120_rfp_vendor_copy_scrub.sql` P1 to P3. P1: non-null, 43, null. Write down P2 and P3.
+- **RJ3** Paste `120_preapply_test.sql`, run once. First line: **"SAFE TO APPLY 120."**; 29 assertions; 0
+  FAIL; 0 INCONCLUSIVE. Read the **SCRUB** lines (subtract the fixture: one inbox row, one token).
+- **RJ4** Dry run (COMMIT at line 540 changed to ROLLBACK): P3 answers exactly as in RJ2.
+- **RJ5** Real run. Then V1: 0, 0. V2: two triggers, enabled O, tgtype 23. V3: four functions, as the
+  header says. V4: 161. V5: row `04391718`, `rfp_line_id` null, allow-listed keys only.
+- **RJ6** Run the file a second time: NOTICE "120 already applied: nothing changed"; P3 unchanged.
+
+## Part K. Step C code, 120 applied
+
+- **RK1** Repeat RI3 to RI7 as the vendor: identical results. What a vendor could read directly with its
+  own login is every key of its own rows' copies; the owner checks that no copy anywhere holds a removed
+  key:
+  ```sql
+  SELECT count(*) FROM public.partner_rfp_inbox i, jsonb_object_keys(i.master_rfp_json) k
+  WHERE jsonb_typeof(i.master_rfp_json) = 'object' AND NOT (k = ANY (public.rfp_vendor_copy_keys()));
+  ```
+  Expected 0.
+- **RK2** Agency `/agency/bids`: every bid's requirements, categories and rubric (Evaluate tab) show as
+  before (they come from the records). Award and decline a bid: the mail subjects carry the project and
+  scope names. A guest bid can be awarded (the join is `attached_inbox_id`).
+- **RK3** Send a new wizard RFP and a Lightning RFP (to an existing account and to a new address); both
+  succeed (the step C writers satisfy 120's guard). The vendor with an account sees the Lightning RFP in
+  `/partner/rfps` exactly once, even when `/partner/rfps` and My Bids load together.
+- **RK4** Owner SQL, guard check (inside `BEGIN; ... ROLLBACK;`):
+  ```sql
+  UPDATE public.partner_rfp_inbox SET master_rfp_json = master_rfp_json || '{"client":"x"}' WHERE id = '<any inbox id>';
+  ```
+  Expected: ERROR 23514 "A vendor copy may not carry client."
+
+## Part L. 120 down file (only if the guard must come off)
+
+- **RL1** `120_rfp_vendor_copy_scrub_down.sql` drops the two triggers and four functions only. 120's V2 and
+  V3 return no rows; 161 policies. The scrubbed copies stay scrubbed (the down file cannot restore them;
+  the records hold the truth). The step C code keeps writing allow-listed copies.

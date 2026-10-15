@@ -12,6 +12,7 @@ import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/
 import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { exactEmailIlike } from "@/lib/server/account-existence"
+import { vendorTokenReferenceMaterials } from "@/lib/rfp-vendor-copy"
 import {
   createRfpRecordDraft,
   logColumnMissingOnce,
@@ -276,7 +277,7 @@ export async function POST(request: NextRequest) {
         evaluationCriteria,
         budgetCategories,
         businessCriteriaRequired,
-        // D9: the output template lives on the record. The token keeps its copy until step C.
+        // D9 and step C: the output template lives on the record only; the token no longer carries it.
         outputTemplateConfig,
         totalBudget: (project.budget_range as string | null) ?? null,
         showClientToVendors: recordFields.data.show_client_to_vendors === true,
@@ -307,6 +308,14 @@ export async function POST(request: NextRequest) {
     }
     const recordLineId =
       recordDraft.status === "created" ? recordDraft.lineIdByKey.get(rawScopeItemId || "magic") ?? null : null
+
+    // STEP C (leak #8): what the vendor may hold of this send. The client name only when this RFP
+    // shows it (D3), the budget only when this line is released (D2). Both go on the token's and
+    // the inbox row's release columns, never into JSON, and the invitation email follows the same
+    // two choices.
+    const showClientToVendors = recordFields.data.show_client_to_vendors === true
+    const clientNameReleased = showClientToVendors ? ((project.client_name as string | null)?.trim() || null) : null
+    const releasedBudget = recordFields.data.release_budget === true ? recordEstimatedBudget : null
 
     // The deadline this send is about to OVERWRITE, read before the upsert discards it.
     //
@@ -368,7 +377,14 @@ export async function POST(request: NextRequest) {
       scope_item_id: scopeItemId,
       scope_item_name: scopeItemName,
       scope_item_description: scopeItemDescription,
-      reference_materials: { materials: referenceMaterials, output_template_config: outputTemplateConfig },
+      // STEP C (D9): the materials only (lib/rfp-vendor-copy.ts, TOKEN_REFERENCE_MATERIALS_KEYS); the
+      // output template is on the record. Only when no record could be written (118 missing) does
+      // the token keep it, because nothing else would hold it.
+      reference_materials:
+        recordDraft.status === "created"
+          ? vendorTokenReferenceMaterials(referenceMaterials)
+          : { materials: referenceMaterials, output_template_config: outputTemplateConfig },
+      client_name_released: clientNameReleased,
       business_criteria_required: businessCriteriaRequired,
       token,
       expires_at,
@@ -398,10 +414,13 @@ export async function POST(request: NextRequest) {
       .upsert(payloadAttempt, { onConflict: "org_id,project_id,vendor_email" })
       .select()
       .single()
-    // Step A fallback: rfp_line_id does not exist before 118. Dropped and retried, logged once.
-    if (missingColumnName(upsertErr) === "rfp_line_id") {
-      logColumnMissingOnce(RECORD_SITE, "rfp_magic_tokens", "rfp_line_id")
-      const { rfp_line_id: _omitted, ...rest } = payloadAttempt
+    // Step A fallback: rfp_line_id and client_name_released do not exist before 118. Dropped and
+    // retried, logged once each.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const missing = missingColumnName(upsertErr)
+      if (missing !== "rfp_line_id" && missing !== "client_name_released") break
+      logColumnMissingOnce(RECORD_SITE, "rfp_magic_tokens", missing)
+      const { [missing]: _omitted, ...rest } = payloadAttempt
       payloadAttempt = rest
       ;({ data: tokenRow, error: upsertErr } = await service
         .from("rfp_magic_tokens")
@@ -469,16 +488,19 @@ export async function POST(request: NextRequest) {
 
     // Step A, write order (3) and (4), on the service client like every other write here: the
     // attached inbox row carries this send's line, and the token points at the inbox row
-    // (attached_inbox_id, which replaces the _magic_token JSON join in step B). The attach helper
-    // itself is unchanged; _magic_token is still written (stripped in step C, D8). A failure here
-    // is logged, leaves broadcast_at unset, and does not fail the send, exactly as a failed attach
-    // never has.
+    // (attached_inbox_id, the only join since step C; the attach helper writes no _magic_token,
+    // D8). STEP C: the row also carries this send's release choices, the client name (D3) and the
+    // line's released budget (D2), so a resend that changes either is what the vendor sees. A
+    // failure here is logged, leaves broadcast_at unset, and does not fail the send, exactly as a
+    // failed attach never has.
     let recordLinksOk = true
     if (recordDraft.status === "created" && attachedInboxId) {
       if (recordLineId) {
         recordLinksOk =
           (await setLinkColumn(service, RECORD_SITE, "partner_rfp_inbox", { column: "id", value: attachedInboxId }, {
             rfp_line_id: recordLineId,
+            client_name_released: clientNameReleased,
+            estimated_budget: releasedBudget,
           })) && recordLinksOk
       }
       recordLinksOk =
@@ -489,9 +511,12 @@ export async function POST(request: NextRequest) {
 
     const agencyName =
       auth.profile?.company_name?.trim() || auth.profile?.full_name?.trim() || auth.profile?.display_name?.trim() || "A lead agency"
+    // STEP C (leak #8): the email carries the client name only when this RFP shows it (D3), and a
+    // budget only when this line's budget is released (D2) - the released figure, not the
+    // project's whole budget range.
     const scopeSummary = [
-      `${agencyName} has invited you to bid on ${project.name}${project.client_name ? ` for ${project.client_name}` : ""}.`,
-      project.budget_range ? `Budget range: ${project.budget_range}.` : null,
+      `${agencyName} has invited you to bid on ${project.name}${clientNameReleased ? ` for ${clientNameReleased}` : ""}.`,
+      releasedBudget ? `Budget: ${releasedBudget}.` : null,
       scopeItemName ? `Scope: ${scopeItemName}.` : null,
     ]
       .filter(Boolean)

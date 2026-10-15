@@ -154,25 +154,23 @@ export async function GET() {
     const rows = responses || []
 
     const inboxIds = [...new Set(rows.map((r) => r.inbox_item_id as string | null).filter((id): id is string => Boolean(id)))]
-    let scopeByInboxId: Record<string, { scope_item_name: string | null; project_id: string | null }> = {}
+    // STEP C (leak #8): the client name comes only from partner_rfp_inbox.client_name_released,
+    // which the lead agency's per-RFP toggle sets (D3). The projects.client_name join is gone.
+    let scopeByInboxId: Record<string, { scope_item_name: string | null; client_name_released: string | null }> = {}
     if (inboxIds.length > 0) {
       const { data: inboxRows } = await supabase
         .from("partner_rfp_inbox")
-        .select("id, scope_item_name, project_id")
+        .select("id, scope_item_name, client_name_released")
         .in("id", inboxIds)
       scopeByInboxId = Object.fromEntries(
         (inboxRows || []).map((r) => [
           r.id as string,
-          { scope_item_name: (r.scope_item_name as string | null) ?? null, project_id: (r.project_id as string | null) ?? null },
+          {
+            scope_item_name: (r.scope_item_name as string | null) ?? null,
+            client_name_released: (r.client_name_released as string | null) ?? null,
+          },
         ])
       )
-    }
-
-    const projectIds = [...new Set(Object.values(scopeByInboxId).map((s) => s.project_id).filter((id): id is string => Boolean(id)))]
-    let clientNameByProjectId: Record<string, string | null> = {}
-    if (projectIds.length > 0) {
-      const { data: projectRows } = await supabase.from("projects").select("id, client_name").in("id", projectIds)
-      clientNameByProjectId = Object.fromEntries((projectRows || []).map((p) => [p.id as string, (p.client_name as string | null) ?? null]))
     }
 
     // 079-ORG-ID-READ. Was `.from("profiles").in("id", <lead org ids>)`. Neither guard
@@ -211,7 +209,7 @@ export async function GET() {
         submitted_at: (r.submitted_at as string | null) ?? null,
         updated_at: (r.updated_at as string | null) ?? (r.created_at as string | null) ?? null,
         scope_item_name: scope?.scope_item_name ?? null,
-        client_name: scope?.project_id ? clientNameByProjectId[scope.project_id] ?? null : null,
+        client_name: scope?.client_name_released ?? null,
         agency_company_name: agency?.company_name ?? null,
         agency_full_name: agency?.full_name ?? null,
       }

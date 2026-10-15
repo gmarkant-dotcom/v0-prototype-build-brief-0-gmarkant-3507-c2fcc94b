@@ -3,6 +3,7 @@ import { createOrgNotification } from "@/lib/notifications"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 import type { OrgId } from "@/lib/entitlements"
 import { ORG_CONTACT_SELECT, resolveOrgContact, logOrgContactGap, type OrgEmbed } from "@/lib/org-contact"
+import { pickVendorCopy } from "@/lib/rfp-vendor-copy"
 
 /** Fields this module actually reads off a rfp_magic_tokens row - callers pass whatever
  *  shape they already have (select("*") or a narrower select), this just documents the
@@ -31,6 +32,12 @@ export type MagicTokenForAttach = {
    *  portal, since they key off partner_rfp_responses.vendor_org_id / inbox_item_id directly,
    *  not off partner_rfp_inbox at all. */
   response_id?: string | null
+  /** 118. The RFP record line this invitation was sent from; the inbox row carries the same. */
+  rfp_line_id?: string | null
+  /** 118. THE JOIN (step C): the inbox row this invitation is attached to. */
+  attached_inbox_id?: string | null
+  /** 118. The client name when the agency shows it to vendors on this RFP (D3), else null. */
+  client_name_released?: string | null
 }
 
 /** Every column attachMagicTokenToPartnerInbox reads. Shared by all four callers so a row
@@ -38,9 +45,9 @@ export type MagicTokenForAttach = {
  *  is a race (the RFP list and the bids list are fetched in parallel), and the row is only
  *  created once. The _NO_DEADLINE variant is the pre-migration-074 fallback (42703). */
 export const MAGIC_TOKEN_ATTACH_COLUMNS =
-  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, created_at, response_id"
+  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, created_at, response_id, rfp_line_id, attached_inbox_id, client_name_released"
 export const MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE =
-  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, created_at, response_id"
+  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, created_at, response_id, rfp_line_id, attached_inbox_id, client_name_released"
 
 export type AttachResult =
   | { attached: true; inboxId: string; created: boolean }
@@ -56,8 +63,10 @@ export type AttachResult =
  * non-uuid ids. Passing that null straight through to the insert made every attach fail with
  * 23502 not_null_violation - silently, since every caller only logs a failed result.
  *
- * Derived from the token instead: non-null, stable across every call for the same invitation,
- * and namespaced so it can never collide with a real scope item id from the broadcast flow.
+ * Derived from the token instead: non-null and namespaced so it can never collide with a real
+ * scope item id from the broadcast flow. STEP C: it is no longer a join key (nothing reads it
+ * to find a row); the format is unchanged, and a vendor read never selects it
+ * (lib/rfp-vendor-copy.ts). The token inside it is reported to the owner as a finding.
  */
 function inboxScopeItemId(tokenRow: MagicTokenForAttach): string {
   return (tokenRow.scope_item_id || "").trim() || `magic:${tokenRow.token}`
@@ -65,142 +74,81 @@ function inboxScopeItemId(tokenRow: MagicTokenForAttach): string {
 
 type ExistingResponse = { id: string; vendor_org_id: string | null; inbox_item_id: string | null; status: string | null }
 
-/** Linkage worth preserving when two rows for the same invitation are collapsed into one.
- *  invite_token is deliberately absent: it is UNIQUE, only the manual-invite broadcast flow
- *  ever sets it, and a magic-attach row never has one, so moving it could only ever collide. */
-const MERGEABLE_LINKAGE = [
-  "vendor_org_id",
-  "partnership_id",
-  "viewed_at",
-  "partner_intent",
-  "intent_set_at",
-  "nda_confirmed_at",
-  "agency_nda_notified_at",
-  "claimed_at",
-  "response_deadline",
-] as const
+const INBOX_CANDIDATE_COLUMNS = "id, lead_org_id, created_at, status, vendor_org_id, rfp_line_id"
 
-const INBOX_CANDIDATE_COLUMNS = `id, created_at, status, ${MERGEABLE_LINKAGE.join(", ")}`
+type InboxCandidate = {
+  id: string
+  lead_org_id: string | null
+  created_at: string | null
+  status: string | null
+  vendor_org_id: string | null
+  rfp_line_id: string | null
+}
 
-type InboxCandidate = { id: string; created_at: string | null; status: string | null } & Record<string, unknown>
-
-/**
- * Every partner_rfp_inbox row that represents this one invitation, by either key.
- *
- * Two independent keys, because they were introduced at different times and a row may carry
- * only one of them: `master_rfp_json._magic_token` (the original marker) and the derived
- * `scope_item_id` (H4). The scope-id probe only runs for the synthetic `magic:` form - a token
- * carrying a real uuid shares that id with the broadcast flow's own rows for the same scope
- * item, and matching there would collapse someone else's row into this invitation.
- *
- * Sorted by (created_at, id): an immutable, total order that every concurrent caller computes
- * identically, which is what makes the collapse below safe to run from two requests at once.
- */
-async function findInvitationRows(
+async function readInboxCandidate(
   supabase: SupabaseClient,
-  tokenRow: MagicTokenForAttach,
-  scopeItemId: string
-): Promise<{ rows: InboxCandidate[]; error: string | null }> {
-  const byToken = await supabase
+  inboxId: string,
+  orgId: string
+): Promise<{ row: InboxCandidate | null; error: string | null }> {
+  const { data, error } = await supabase
     .from("partner_rfp_inbox")
     .select(INBOX_CANDIDATE_COLUMNS)
-    .eq("lead_org_id", tokenRow.org_id)
-    .contains("master_rfp_json", { _magic_token: tokenRow.token })
-  if (byToken.error) return { rows: [], error: byToken.error.message }
-
-  const byId = new Map<string, InboxCandidate>()
-  for (const row of (byToken.data || []) as unknown as InboxCandidate[]) byId.set(row.id, row)
-
-  if (scopeItemId.startsWith("magic:")) {
-    const byScope = await supabase
-      .from("partner_rfp_inbox")
-      .select(INBOX_CANDIDATE_COLUMNS)
-      .eq("lead_org_id", tokenRow.org_id)
-      .eq("scope_item_id", scopeItemId)
-    if (byScope.error) return { rows: [], error: byScope.error.message }
-    for (const row of (byScope.data || []) as unknown as InboxCandidate[]) byId.set(row.id, row)
-  }
-
-  const rows = [...byId.values()].sort((a, b) => {
-    const at = a.created_at || ""
-    const bt = b.created_at || ""
-    if (at !== bt) return at < bt ? -1 : 1
-    return a.id < b.id ? -1 : 1
-  })
-  return { rows, error: null }
+    .eq("id", inboxId)
+    .eq("lead_org_id", orgId)
+    .maybeSingle()
+  if (error) return { row: null, error: error.message }
+  return { row: (data as unknown as InboxCandidate | null) ?? null, error: null }
 }
 
 /**
- * H5 self-heal: collapse every row for this invitation into one canonical row.
- *
- * The winner is the first in the (created_at, id) order above, NOT "whichever row currently
- * has the richest linkage". Richness is a moving target - two concurrent requests reading it a
- * few milliseconds apart can disagree about which row is richer and then delete each other's
- * pick, losing both. The order here is computed from immutable columns, so every caller agrees
- * without coordination. Richness is preserved by moving it onto the winner instead: linkage is
- * merged field by field, and the only foreign key into this table
- * (partner_rfp_responses.inbox_item_id) is repointed before anything is deleted.
+ * Sets rfp_magic_tokens.attached_inbox_id ONLY WHILE IT IS NULL (compare-and-set): the one
+ * statement two racing attaches cannot both win. Returns the token's attached row afterwards,
+ * whoever set it. 118's link-column guard admits the write on the service role's trusted path and
+ * checks the row is of the token's own organization (23514).
  */
-async function collapseInvitationRows(
+async function claimAttachedInbox(
   supabase: SupabaseClient,
-  rows: InboxCandidate[],
-  token: string
-): Promise<InboxCandidate> {
-  const winner = rows[0]
-  const losers = rows.slice(1)
-  if (losers.length === 0) return winner
+  tokenRow: MagicTokenForAttach,
+  inboxId: string
+): Promise<{ attachedInboxId: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("rfp_magic_tokens")
+    .update({ attached_inbox_id: inboxId })
+    .eq("token", tokenRow.token)
+    .eq("org_id", tokenRow.org_id)
+    .is("attached_inbox_id", null)
+    .select("attached_inbox_id")
+  if (error) return { attachedInboxId: null, error: error.message }
+  if (Array.isArray(data) && data.length === 1) return { attachedInboxId: inboxId, error: null }
+  const { data: current, error: readErr } = await supabase
+    .from("rfp_magic_tokens")
+    .select("attached_inbox_id")
+    .eq("token", tokenRow.token)
+    .eq("org_id", tokenRow.org_id)
+    .maybeSingle()
+  if (readErr) return { attachedInboxId: null, error: readErr.message }
+  return { attachedInboxId: (current?.attached_inbox_id as string | null | undefined) ?? null, error: null }
+}
 
-  console.warn("[magic-token-attach] collapsing duplicate invitation rows", {
-    token,
-    keep: winner.id,
-    remove: losers.map((r) => r.id),
-  })
-
-  // Merge linkage: first non-null wins, winner's own value taking precedence.
-  const patch: Record<string, unknown> = {}
-  for (const field of MERGEABLE_LINKAGE) {
-    if (winner[field] != null) continue
-    const donor = losers.find((r) => r[field] != null)
-    if (donor) patch[field] = donor[field]
-  }
-  if (Object.keys(patch).length > 0) {
-    const { error: mergeErr } = await supabase.from("partner_rfp_inbox").update(patch).eq("id", winner.id)
-    if (mergeErr) {
-      console.error("[magic-token-attach] duplicate merge failed, leaving duplicates in place", {
-        token,
-        winnerId: winner.id,
-        message: mergeErr.message,
-      })
-      return winner
-    }
-    Object.assign(winner, patch)
-  }
-
-  // Repoint the only FK into partner_rfp_inbox before deleting anything, so no response is
-  // ever left pointing at a row that is about to disappear.
-  const loserIds = losers.map((r) => r.id)
+/** Removes a row this call inserted and then lost the race for. Nothing can point at it yet but
+ *  a response this same call repointed, so responses are repointed first, as before. */
+async function discardLosingRow(supabase: SupabaseClient, loserId: string, winnerId: string) {
   const { error: repointErr } = await supabase
     .from("partner_rfp_responses")
-    .update({ inbox_item_id: winner.id })
-    .in("inbox_item_id", loserIds)
+    .update({ inbox_item_id: winnerId })
+    .eq("inbox_item_id", loserId)
   if (repointErr) {
-    console.error("[magic-token-attach] duplicate repoint failed, leaving duplicates in place", {
-      token,
-      winnerId: winner.id,
+    console.error("[magic-token-attach] race loser: response repoint failed, row left in place", {
+      loserId,
+      winnerId,
       message: repointErr.message,
     })
-    return winner
+    return
   }
-
-  const { error: deleteErr } = await supabase.from("partner_rfp_inbox").delete().in("id", loserIds)
+  const { error: deleteErr } = await supabase.from("partner_rfp_inbox").delete().eq("id", loserId)
   if (deleteErr) {
-    console.error("[magic-token-attach] duplicate delete failed (non-fatal, retried next load)", {
-      token,
-      winnerId: winner.id,
-      message: deleteErr.message,
-    })
+    console.error("[magic-token-attach] race loser: delete failed (non-fatal)", { loserId, winnerId, message: deleteErr.message })
   }
-  return winner
 }
 
 /**
@@ -209,22 +157,28 @@ async function collapseInvitationRows(
  * vendor with an existing account sees it in /partner/rfps instead of only in the
  * invitation email (G1).
  *
- * Idempotency: partner_rfp_inbox has no magic_token_id-shaped column (a real schema gap -
- * flagged, not fixed here since no migrations are permitted this pass), so the invitation is
- * identified by the two keys findInvitationRows probes. Checking those keys before inserting
- * is not on its own enough: /partner/rfps and /partner/rfps/bids are fetched in parallel by
- * app/partner/rfps/page.tsx, so two requests ran this check-then-insert 11ms apart, both saw
- * no row, and both inserted - which is exactly how partner71 ended up with the same awarded
- * bid listed twice. Nothing in the schema forbids it; there is no unique constraint to lean
- * on. So the invariant is enforced by convergence instead: every call re-scans and collapses
- * whatever it finds, including immediately after its own insert, so the loser of a race is
- * cleaned up by the winner of it. Safe to call repeatedly from send-time, the on-login sweep,
- * the bids-list backfill, and a logged-in vendor opening the link directly.
+ * STEP C (leak #8): THE JOIN IS rfp_magic_tokens.attached_inbox_id (118), and only that. The
+ * master_rfp_json._magic_token marker and the 'magic:<token>' scope id are no longer read to find a
+ * row, and _magic_token is no longer written (D8; migration 120 scrubs it and refuses it). In order:
+ *   1. the token's attached_inbox_id, when set, is the invitation's row;
+ *   2. else the row the token's own bid already points at (partner_rfp_responses.inbox_item_id),
+ *      when it is of the token's organization and on the token's line or on none;
+ *   3. else a new row is inserted, carrying the token's line and released client name.
+ * Cases 2 and 3 then set attached_inbox_id with a compare-and-set while it is NULL. Two racing
+ * calls (/partner/rfps and /partner/rfps/bids are fetched in parallel) both insert, exactly one
+ * wins the compare-and-set, and the loser removes its own row and uses the winner's. Row and
+ * token are on the same line and organization by construction; 118's guard re-checks both.
+ *
+ * The vendor copy written into a new row is the allow-listed vendor copy (lib/rfp-vendor-copy.ts):
+ * the project name and the token's business criteria only. No client name and no budget in the
+ * JSON; the client name only through client_name_released, copied from the token (which the
+ * agency's per-RFP toggle keeps current). No budget: this vendor-triggered path does not read the
+ * agency's record, so the released budget is not known here, and a vendor sees less, never more.
  *
  * Callers are responsible for having already verified vendorEmail matches the target
  * profile's email (this function trusts partnerId, it does not re-derive it) - the one
  * thing it does re-check itself is expiry, since "attach an expired invitation" is never
- * correct regardless of which caller reached here.
+ * correct regardless of which caller reached here. Every caller passes the service role.
  */
 export async function attachMagicTokenToPartnerInbox(
   supabase: SupabaseClient,
@@ -240,9 +194,9 @@ export async function attachMagicTokenToPartnerInbox(
     return { attached: false, reason: "expired" }
   }
 
-  // Read once, used twice: to seed the synthesized row's own status below (a bid that was
-  // already decided must not land in the vendor's portal reading "New"), and to backfill the
-  // response's linkage afterwards.
+  // Read once, used three times: to find the invitation's row (case 2), to seed a synthesized
+  // row's own status below (a bid that was already decided must not land in the vendor's portal
+  // reading "New"), and to backfill the response's linkage afterwards.
   let existingResponse: ExistingResponse | null = null
   if (tokenRow.response_id) {
     const { data: responseRow } = await supabase
@@ -257,8 +211,6 @@ export async function attachMagicTokenToPartnerInbox(
     if (!existingResponse) return
     const patch: Record<string, unknown> = {}
     if (!existingResponse.vendor_org_id) patch.vendor_org_id = partnerId
-    // Repointed rather than only filled: after a collapse, a response may still be pointing
-    // at a row that no longer exists.
     if (existingResponse.inbox_item_id !== inboxId) patch.inbox_item_id = inboxId
     if (Object.keys(patch).length === 0) return
     const { error: patchErr } = await supabase
@@ -274,54 +226,70 @@ export async function attachMagicTokenToPartnerInbox(
     }
   }
 
-  const scopeItemId = inboxScopeItemId(tokenRow)
-  const initial = await findInvitationRows(supabase, tokenRow, scopeItemId)
-  if (initial.error) {
-    console.error("[magic-token-attach] idempotency check failed", { token: tokenRow.token, message: initial.error })
-    return { attached: false, reason: initial.error }
-  }
-
-  // PHASE 3: `tokenRow.org_id` is an ORGANIZATION id and this looked it up in `profiles`.
-  // The value it produces is written into partner_rfp_inbox.agency_company_name, which is
-  // the DENORMALIZED name the vendor's Open RFPs screen renders and groups by - so for a
-  // Lightning RFP from any agency created after 079 the lookup returned nothing and every
-  // invitation was permanently stamped "Lead agency". Permanently, because it is a snapshot:
-  // nothing re-reads it, so fixing the source later does not repair rows already written.
-  //
-  // Read from `organizations` through the shared two-hop fragment, like every other
-  // org-to-org read. This runs on a SERVICE-ROLE client at three of its four call sites, so
-  // RLS is not what was failing here - the table was simply wrong.
-  const [{ data: agencyOrg }, { data: project }] = await Promise.all([
-    supabase
-      .from("organizations")
-      .select(ORG_CONTACT_SELECT)
-      .eq("id", tokenRow.org_id)
-      .maybeSingle(),
-    tokenRow.project_id
-      ? supabase.from("projects").select("name, client_name, budget_range").eq("id", tokenRow.project_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
-  const agencyContact = resolveOrgContact(agencyOrg as OrgEmbed, null)
-  logOrgContactGap("magic-token-attach (lead agency name)", agencyContact, { token: tokenRow.token })
-  // Same precedence and the same literal fallback as before. It now fires only when the
-  // organization genuinely has no name, rather than on every post-079 agency.
-  const agencyCompanyName = agencyContact.orgName || agencyContact.contactFullName || "Lead agency"
-
-  let rows = initial.rows
+  const tokenLine = tokenRow.rfp_line_id ?? null
+  // Set in case (3), the only case that announces the invitation.
+  let agencyCompanyName = "Lead agency"
+  let winner: InboxCandidate | null = null
   let created = false
   let insertedId: string | null = null
 
-  if (rows.length === 0) {
-    // Best-effort master RFP snapshot - a magic token carries scope/criteria data, not the
-    // full master-RFP shape the standard broadcast flow writes, so this is deliberately
-    // partial rather than fabricated. _magic_token is the dedupe marker described above.
-    const masterRfpJson: Record<string, unknown> = {
-      _magic_token: tokenRow.token,
-      projectName: project?.name ?? null,
-      client: project?.client_name ?? null,
-      totalBudget: project?.budget_range ?? null,
-      business_criteria_required: tokenRow.business_criteria_required ?? null,
+  // (1) The token's attached row.
+  if (tokenRow.attached_inbox_id) {
+    const found = await readInboxCandidate(supabase, tokenRow.attached_inbox_id, tokenRow.org_id)
+    if (found.error) {
+      console.error("[magic-token-attach] attached row read failed", { inboxId: tokenRow.attached_inbox_id, message: found.error })
+      return { attached: false, reason: found.error }
     }
+    winner = found.row
+  }
+
+  // (2) The row the token's own bid points at, adopted when it is of the token's organization and
+  //     on the token's line or on none.
+  if (!winner && existingResponse?.inbox_item_id) {
+    const found = await readInboxCandidate(supabase, existingResponse.inbox_item_id, tokenRow.org_id)
+    if (found.error) {
+      console.error("[magic-token-attach] bid's inbox row read failed", { inboxId: existingResponse.inbox_item_id, message: found.error })
+      return { attached: false, reason: found.error }
+    }
+    const candidate = found.row
+    if (candidate && (candidate.rfp_line_id == null || candidate.rfp_line_id === tokenLine)) {
+      const claim = await claimAttachedInbox(supabase, tokenRow, candidate.id)
+      if (claim.error) {
+        console.error("[magic-token-attach] attach claim failed", { inboxId: candidate.id, message: claim.error })
+        return { attached: false, reason: claim.error }
+      }
+      if (claim.attachedInboxId === candidate.id) {
+        winner = candidate
+      } else if (claim.attachedInboxId) {
+        const other = await readInboxCandidate(supabase, claim.attachedInboxId, tokenRow.org_id)
+        winner = other.row
+      }
+    } else if (candidate) {
+      console.error("[magic-token-attach] the bid's inbox row is on another RFP line; not adopted", {
+        inboxId: candidate.id,
+      })
+    }
+  }
+
+  // (3) A new row.
+  if (!winner) {
+    // PHASE 3: `tokenRow.org_id` is an ORGANIZATION id; the agency's display name comes from
+    // `organizations` through the shared two-hop fragment (it is denormalized onto the row and
+    // never re-read, so it must be right at insert).
+    const [{ data: agencyOrg }, { data: project }] = await Promise.all([
+      supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT)
+        .eq("id", tokenRow.org_id)
+        .maybeSingle(),
+      tokenRow.project_id
+        ? supabase.from("projects").select("name").eq("id", tokenRow.project_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    const agencyContact = resolveOrgContact(agencyOrg as OrgEmbed, null)
+    logOrgContactGap("magic-token-attach (lead agency name)", agencyContact, { inboxFor: tokenRow.org_id })
+    agencyCompanyName = agencyContact.orgName || agencyContact.contactFullName || "Lead agency"
+    const projectName = (project as { name?: string | null } | null)?.name ?? null
 
     const insertRow: Record<string, unknown> = {
       lead_org_id: tokenRow.org_id,
@@ -331,10 +299,17 @@ export async function attachMagicTokenToPartnerInbox(
       // Both NOT NULL on partner_rfp_inbox - see inboxScopeItemId above for scope_item_id, and
       // note the magic-link wizard does not require a scope item name at all, unlike the
       // broadcast flow, so the project name is the honest fallback rather than a fabricated one.
-      scope_item_id: scopeItemId,
-      scope_item_name: (tokenRow.scope_item_name || "").trim() || project?.name?.trim() || "Scope item",
+      scope_item_id: inboxScopeItemId(tokenRow),
+      scope_item_name: (tokenRow.scope_item_name || "").trim() || projectName?.trim() || "Scope item",
       scope_item_description: tokenRow.scope_item_description,
-      master_rfp_json: masterRfpJson,
+      // The allow-listed vendor copy (lib/rfp-vendor-copy.ts). No _magic_token, client or budget.
+      master_rfp_json: pickVendorCopy({
+        projectName,
+        business_criteria_required: tokenRow.business_criteria_required ?? null,
+      }),
+      // 118: the token's line, and the client name only when the agency shows it (D3).
+      rfp_line_id: tokenLine,
+      client_name_released: tokenRow.client_name_released ?? null,
       agency_company_name: agencyCompanyName,
       // A retroactively attached invitation whose bid was already submitted (and possibly already
       // awarded or declined) must carry that outcome, not "new" - the award PATCH's own inbox
@@ -354,36 +329,42 @@ export async function attachMagicTokenToPartnerInbox(
     const { data: inserted, error: insertErr } = await supabase
       .from("partner_rfp_inbox")
       .insert(insertRow)
-      .select("id")
+      .select(INBOX_CANDIDATE_COLUMNS)
       .single()
-    // 23505 means a unique constraint caught a concurrent twin first. Nothing enforces one
-    // today, but it is the natural hardening for this table, and it must read as "someone else
-    // already created it" rather than as a failed attach if it is ever added.
-    if (insertErr && insertErr.code !== "23505") {
-      console.error("[magic-token-attach] insert failed", { token: tokenRow.token, message: insertErr.message })
-      return { attached: false, reason: insertErr.message }
+    if (insertErr || !inserted) {
+      console.error("[magic-token-attach] insert failed", { inboxFor: tokenRow.org_id, message: insertErr?.message })
+      return { attached: false, reason: insertErr?.message || "insert produced no row" }
     }
-    created = !insertErr
-    insertedId = (inserted?.id as string | undefined) ?? null
+    const mine = inserted as unknown as InboxCandidate
+    insertedId = mine.id
 
-    // Re-scan rather than trusting the inserted id: this is the window in which a parallel
-    // request may have inserted its own copy, and the collapse below is what closes it.
-    const after = await findInvitationRows(supabase, tokenRow, scopeItemId)
-    if (after.error || after.rows.length === 0) {
-      console.error("[magic-token-attach] post-insert rescan found no row", {
-        token: tokenRow.token,
-        message: after.error,
-      })
-      return { attached: false, reason: after.error || "insert produced no readable row" }
+    const claim = await claimAttachedInbox(supabase, tokenRow, mine.id)
+    if (claim.error || !claim.attachedInboxId) {
+      // Nothing points at the new row; removing it keeps the next attach from duplicating it.
+      console.error("[magic-token-attach] attach claim failed; new row removed", { inboxId: mine.id, message: claim.error })
+      await supabase.from("partner_rfp_inbox").delete().eq("id", mine.id)
+      return { attached: false, reason: claim.error || "attach claim matched no token" }
     }
-    rows = after.rows
+    if (claim.attachedInboxId === mine.id) {
+      winner = mine
+      created = true
+    } else {
+      // A parallel request attached its own row first: use it, and remove ours.
+      const other = await readInboxCandidate(supabase, claim.attachedInboxId, tokenRow.org_id)
+      await discardLosingRow(supabase, mine.id, claim.attachedInboxId)
+      winner = other.row
+    }
   }
 
-  const winner = await collapseInvitationRows(supabase, rows, tokenRow.token)
+  if (!winner) {
+    return { attached: false, reason: "the token's attached inbox row could not be read" }
+  }
+
   await backfillResponseLinkage(winner.id)
 
-  // Self-heal the two things a row created before this pass got wrong: an attach-time
-  // received date, and a status frozen at whatever it was when the row was synthesized.
+  // Self-heal the things a row created before this pass got wrong: an attach-time received date,
+  // a status frozen at whatever it was when the row was synthesized, a missing owner, and (118) a
+  // row with no line while its token has one (same organization by construction).
   const heal: Record<string, unknown> = {}
   if (tokenRow.created_at && winner.created_at !== tokenRow.created_at) heal.created_at = tokenRow.created_at
   const derivedStatus = existingResponse?.status ? mapResponseStatusToInboxStatus(existingResponse.status) : null
@@ -391,6 +372,7 @@ export async function attachMagicTokenToPartnerInbox(
   // Filled, never reassigned: an invitation row already owned by a different account is not
   // this vendor's to claim, and silently repointing it would be a misattribution.
   if (winner.vendor_org_id == null) heal.vendor_org_id = partnerId
+  if (winner.rfp_line_id == null && tokenLine) heal.rfp_line_id = tokenLine
   if (Object.keys(heal).length > 0) {
     const { error: healErr } = await supabase.from("partner_rfp_inbox").update(heal).eq("id", winner.id)
     if (healErr) {
@@ -405,11 +387,13 @@ export async function attachMagicTokenToPartnerInbox(
   // the vendor already lived through - they answered this RFP, so "New RFP in your inbox"
   // would be false, and for an awarded bid it would arrive after the award notification.
   // winner.id === insertedId keeps this to exactly one notification when two requests race:
-  // only the request whose own row survived the collapse announces the invitation.
+  // only the request whose own row won the compare-and-set announces the invitation.
   if (created && !existingResponse && winner.id === insertedId) {
     try {
       // Was createNotification({ userId: partnerId }) where partnerId is a vendor
       // ORGANIZATION id. Fans out over its members now - see lib/notifications.ts.
+      // D8 (step C): no magicToken in `data`. It fanned the vendor's bearer link out to every
+      // member of the vendor organization, and nothing read it.
       await createOrgNotification({
         supabase,
         orgId: partnerId,
@@ -418,7 +402,7 @@ export async function attachMagicTokenToPartnerInbox(
         title: "New RFP in your inbox",
         message: `${agencyCompanyName} sent you an RFP${tokenRow.scope_item_name ? ` for ${tokenRow.scope_item_name}` : ""}.`,
         link: `/partner/rfps/${winner.id}`,
-        data: { inboxId: winner.id, magicToken: tokenRow.token },
+        data: { inboxId: winner.id },
       })
     } catch (notifyErr) {
       console.error("[magic-token-attach] in-app notification failed", {

@@ -5,8 +5,37 @@ import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { requirePartnerRole } from "@/lib/api-auth"
 import { selectVendorResponse } from "@/lib/server/rfp-response-private"
+import { pickVendorCopy, VENDOR_INBOX_DETAIL_COLUMNS } from "@/lib/rfp-vendor-copy"
 
 export const dynamic = "force-dynamic"
+
+/**
+ * The inbox row as the vendor's RFP page receives it: only the fields app/partner/rfps/[id]/page.tsx
+ * reads, and the vendor copy narrowed to the allow-list. Before migration 120 old copies still hold
+ * the client, the program budget, every line and the rubric; this is what keeps them off the wire.
+ */
+function vendorInboxView(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    lead_org_id: (row.lead_org_id as string | null) ?? null,
+    scope_item_name: (row.scope_item_name as string | null) ?? null,
+    scope_item_description: (row.scope_item_description as string | null) ?? null,
+    estimated_budget: (row.estimated_budget as string | null) ?? null,
+    timeline: (row.timeline as string | null) ?? null,
+    master_rfp_json: pickVendorCopy(row.master_rfp_json),
+    agency_company_name: (row.agency_company_name as string | null) ?? null,
+    status: (row.status as string | null) ?? null,
+    created_at: (row.created_at as string | null) ?? null,
+    viewed_at: (row.viewed_at as string | null) ?? null,
+    response_deadline: (row.response_deadline as string | null) ?? null,
+    close_bidding_at_deadline: (row.close_bidding_at_deadline as boolean | null) ?? null,
+    partner_intent: (row.partner_intent as string | null) ?? null,
+    intent_set_at: (row.intent_set_at as string | null) ?? null,
+    nda_gate_enforced: (row.nda_gate_enforced as boolean | null) ?? null,
+    nda_confirmed_at: (row.nda_confirmed_at as string | null) ?? null,
+    require_terms_disclosure: (row.require_terms_disclosure as boolean | null) ?? null,
+  }
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,11 +49,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const { data: profile } = await supabase.from("profiles").select("email").eq("id", user.id).maybeSingle()
 
-    const { data: inbox, error: inboxError } = await supabase
+    // STEP C (leak #8): an explicit column list, never "*" (lib/rfp-vendor-copy.ts). No
+    // scope_item_id ('magic:<token>' on a Lightning row), no invite token.
+    const { data: inboxData, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
-      .select("*")
+      .select(VENDOR_INBOX_DETAIL_COLUMNS)
       .eq("id", id)
       .maybeSingle()
+    const inbox = (inboxData as unknown as Record<string, unknown> | null) ?? null
 
     if (inboxError) {
       console.error("[partner/rfps/[id]] inbox:", inboxError)
@@ -74,7 +106,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .eq("id", id)
         .in("vendor_org_id", callerOrgIds)
         .is("viewed_at", null)
-        .select("*")
+        .select(VENDOR_INBOX_DETAIL_COLUMNS)
         .maybeSingle()
 
       if (viewedUpdateError) {
@@ -83,7 +115,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }
 
       if (updatedInbox) {
-        inboxWithViewed = updatedInbox
+        inboxWithViewed = updatedInbox as unknown as Record<string, unknown>
 
         // rfp.view - THE FIRST VIEW, AND ONLY THE FIRST.
         //
@@ -173,17 +205,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // Fetch client_name from the linked project (LEFT JOIN pattern)
-    let clientName: string | null = null
+    // STEP C (leak #8): the client name only when the lead agency released it for this RFP
+    // (partner_rfp_inbox.client_name_released, D3). Never projects.client_name.
+    const clientName = (inboxWithViewed.client_name_released as string | null) ?? null
     const projectId = (inboxWithViewed.project_id as string | null) ?? null
-    if (projectId) {
-      const { data: projectRow } = await supabase
-        .from("projects")
-        .select("client_name")
-        .eq("id", projectId)
-        .maybeSingle()
-      clientName = (projectRow?.client_name as string | null) ?? null
-    }
 
     let response: unknown = null
     // 109: an explicit vendor column list, never "*". The whole row carried the lead agency's
@@ -248,7 +273,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     return NextResponse.json(
       {
-        inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl, client_name: clientName, awarded_at: awardedAt },
+        inbox: {
+          ...vendorInboxView(inboxWithViewed),
+          agency_meeting_url: agencyMeetingUrl,
+          client_name: clientName,
+          awarded_at: awardedAt,
+        },
         response: response ?? null,
         versions,
       },

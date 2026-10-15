@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { agencyGateRefusal } from "@/lib/api-auth"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
 import { projectActiveByEndDate } from "@/lib/project-liveness"
+import { agencyEstimateFor, readLineEstimatedBudgets } from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
 
@@ -38,6 +39,7 @@ function unwrapInbox(
         partnership_id?: string | null
         scope_item_name?: string | null
         estimated_budget?: string | null
+        rfp_line_id?: string | null
       }
     | null
     | undefined
@@ -51,6 +53,7 @@ function unwrapInbox(
     partnership_id?: string | null
     scope_item_name?: string | null
     estimated_budget?: string | null
+    rfp_line_id?: string | null
   }
 }
 
@@ -81,7 +84,8 @@ export async function GET() {
           project_id,
           partnership_id,
           scope_item_name,
-          estimated_budget
+          estimated_budget,
+          rfp_line_id
         )
       `
       )
@@ -94,6 +98,14 @@ export async function GET() {
     }
 
     const rows = respRows || []
+    // Step C: the estimate is the agency's own, from its RFP record line for a linked row
+    // (partner_rfp_inbox.estimated_budget is the vendor's released figure since step C).
+    const lineEstimates = await readLineEstimatedBudgets(
+      supabase,
+      "GET /api/agency/utilization",
+      rows.map((r) => unwrapInbox(r.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])?.rfp_line_id),
+      callerOrgIds
+    )
     const projectIds = new Set<string>()
     for (const r of rows) {
       const inbox = unwrapInbox(r.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])
@@ -187,7 +199,7 @@ export async function GET() {
         partnershipId != null ? assignmentByPair.get(`${projectId}:${partnershipId}`) ?? null : null
       if (project_assignment_id) assignmentIdsForStatus.add(project_assignment_id)
 
-      const est = parseBudget(inbox.estimated_budget)
+      const est = parseBudget(agencyEstimateFor(inbox, lineEstimates))
       const awd = parseBudget((r as { budget_proposal?: unknown }).budget_proposal)
 
       const currency = awd?.currency ?? est?.currency ?? "USD"
