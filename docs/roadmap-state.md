@@ -1,5 +1,22 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (owner; recorded 2026-10-15 on feat/rfp-record-c). THIS BANNER SUPERSEDES THE
+> ONES BELOW.** **119 is applied and verified (2026-10-14)**: pre-apply 33/33 PASS, dry run and
+> rollback proven; 44 records (43 backfilled: wizard 23, Lightning 20, plus smoke test `21f9d17d`),
+> 112 lines, inbox rows linked 97 of 98, tokens linked 21 of 21 (`attached_inbox_id` on 6), 5
+> unverified single-copy records, 0 rows releasing a client name, 161 policies unchanged. The client
+> toggle is verified in the browser in both directions on `21f9d17d`. The one refused row, inbox
+> `04391718` (closed 2026-08-18), was refused because its token row no longer exists (not another
+> organization's token); it stays unlinked and agency readers use the inbox copy fallback for it.
+> **Next free number: 120.** Owner ruling **S-A**: no AI bid summary on vendor or guest submit; the
+> agency generates it on demand and the bids page warms pending summaries up on load.
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **RFP record step C + 120** (`feat/rfp-record-c`): one vendor-copy allow-list, vendor and guest
+>    readers on the release columns, `_magic_token` joins replaced by link columns, attach paths set
+>    `attached_inbox_id`, ruling S-A, `RFP_VENDOR_COPY_SCRUBBED` true; then the scrub and its guard.
+> 2. **The actuals feeder**, migration 121 or later.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-b). THIS BANNER SUPERSEDES THE ONE BELOW.** **118 is applied
 > and catalog-verified (2026-10-14); F1 is closed in production.** Step B code and **119** (the
 > backfill and the client toggle function) are authored on `feat/rfp-record-b`; 119 is NOT applied.

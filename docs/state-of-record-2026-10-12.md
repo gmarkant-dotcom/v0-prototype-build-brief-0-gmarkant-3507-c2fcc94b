@@ -1,5 +1,27 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (owner; recorded 2026-10-15 on feat/rfp-record-c). MIGRATIONS 071-119 ARE
+> APPLIED AND VERIFIED. NEXT FREE MIGRATION NUMBER: 120.** This supersedes "119 ... NOT applied" and
+> "next free 119" in the banner below.
+> **119 applied 2026-10-14:** pre-apply test 33/33 PASS; dry run and rollback proven. Post-apply
+> verified: 44 `rfp_records` (43 backfilled: wizard 23, Lightning 20; plus smoke-test record
+> `21f9d17d`), 112 lines; inbox rows linked 97 of 98; tokens linked 21 of 21 (`attached_inbox_id` set
+> on 6); 0 backfilled records missing `broadcast_at` or showing the client; 5 unverified single-copy
+> records; 0 rows releasing a client name; `rfp_record_set_client_visibility` SECURITY INVOKER with
+> `search_path=public, pg_temp`, anon no, authenticated yes; 161 public policies unchanged.
+> **Toggle verified in the browser** on record `21f9d17d` in both directions: ON wrote the record, 1
+> inbox row and 1 token; OFF cleared all three; the snapshot keeps the name.
+> **The one row 119 refused**, inbox `04391718-bf70-4d63-a0d6-ea773003b6cc` (closed, 2026-08-18), was
+> refused because **its token row no longer exists at all**, NOT because the token belongs to another
+> organization. It stays unlinked; agency readers use the inbox copy fallback for it.
+> **Owner ruling S-A (2026-10-14):** the AI bid summary is no longer generated when a vendor or guest
+> submits a bid. The bid saves with its summary pending; the summary is generated through the agency
+> route `app/api/agency/bids/[responseId]/generate-summary/route.ts` the first time the agency needs
+> it, and the agency bids page starts generating pending summaries in the background on load. Reason:
+> the vendor session cannot and must not read `rfp_records` (D1); a vendor-callable function or a
+> service-role read on a vendor-triggered path were both rejected.
+> **Next:** RFP record step C and migration 120 (the vendor copy scrub), on `feat/rfp-record-c`.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-b). 118 IS APPLIED AND CATALOG-VERIFIED (2026-10-14). F1 IS
 > CLOSED IN PRODUCTION.** This supersedes "PENDING APPLY" and "F1 stays OPEN" in the banner below.
 > 118 pre-apply test: 96 PASS, 0 FAIL, 1 INCONCLUSIVE by design (C3: no user outside the lead
@@ -89,6 +111,7 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **116** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 40/40 PASS. `116_budget_line_math.sql`: 4 nullable columns; trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER; search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
 | **117** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 29/29 PASS. `117_budget_line_kind.sql`: nullable text `budget_lines.fee_or_cost` (NULL inherits the category); CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
 | **118** | **Authored 2026-10-14 on `feat/rfp-record-a`, NOT applied, pre-apply test NOT run.** `118_rfp_records.sql`: `rfp_records`, `rfp_record_lines` (paid-lead-agency RLS, 6 policies, no DELETE), `current_user_entitled_lead_org_ids()`, D5 snapshot and line guards, five nullable link columns on `partner_rfp_inbox` / `rfp_magic_tokens` with the link-column guard; the inbox guard also carries the vendor allow-list (rulings O1/O2, closes F1, `feat/rfp-record-a2`). COMMIT at line 924 (was 845). Pre-apply test 97 assertions (was 82). Expected after apply: 161 public policies. |
+| **119** | **Applied and verified 2026-10-14** (see the top banner; 118 was applied and catalog-verified the same day). `119_rfp_records_backfill.sql`: the backfill and `rfp_record_set_client_visibility()`. Pre-apply 33/33 PASS. One row refused: inbox `04391718`, whose token row no longer exists. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 
