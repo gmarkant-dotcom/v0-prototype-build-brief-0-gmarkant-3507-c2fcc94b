@@ -1,5 +1,13 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-15 (feat/rfp-record-c). 120 IS AUTHORED, NOT APPLIED; its pre-apply test has not
+> been run.** Step C code and `120_rfp_vendor_copy_scrub.sql` (the vendor copy scrub and its guard; down
+> file; pre-apply test, 29 assertions, none INCONCLUSIVE by design; COMMIT at line 540) are on
+> `feat/rfp-record-c`, with the read-only `supabase/sql-checks/120-key-inventory.sql`. Order: deploy the
+> step C code, run the key inventory, then 120's pre-apply test, dry run, apply. **Next free migration
+> number: 120 until it is applied, then 121.** Report: `docs/rfp-record-c-report.md` (findings F1-F8 for
+> the owner).
+
 > **UPDATED 2026-10-14 (owner; recorded 2026-10-15 on feat/rfp-record-c). MIGRATIONS 071-119 ARE
 > APPLIED AND VERIFIED. NEXT FREE MIGRATION NUMBER: 120.** This supersedes "119 ... NOT applied" and
 > "next free 119" in the banner below.
@@ -112,6 +120,7 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **117** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 29/29 PASS. `117_budget_line_kind.sql`: nullable text `budget_lines.fee_or_cost` (NULL inherits the category); CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
 | **118** | **Authored 2026-10-14 on `feat/rfp-record-a`, NOT applied, pre-apply test NOT run.** `118_rfp_records.sql`: `rfp_records`, `rfp_record_lines` (paid-lead-agency RLS, 6 policies, no DELETE), `current_user_entitled_lead_org_ids()`, D5 snapshot and line guards, five nullable link columns on `partner_rfp_inbox` / `rfp_magic_tokens` with the link-column guard; the inbox guard also carries the vendor allow-list (rulings O1/O2, closes F1, `feat/rfp-record-a2`). COMMIT at line 924 (was 845). Pre-apply test 97 assertions (was 82). Expected after apply: 161 public policies. |
 | **119** | **Applied and verified 2026-10-14** (see the top banner; 118 was applied and catalog-verified the same day). `119_rfp_records_backfill.sql`: the backfill and `rfp_record_set_client_visibility()`. Pre-apply 33/33 PASS. One row refused: inbox `04391718`, whose token row no longer exists. |
+| **120** | **Authored 2026-10-15 on `feat/rfp-record-c`, NOT applied, pre-apply test NOT run.** `120_rfp_vendor_copy_scrub.sql`: allow-list functions `rfp_vendor_copy_keys()` and `rfp_token_reference_materials_keys()`, LG120 pre-flight, scrub of `partner_rfp_inbox.master_rfp_json` and `rfp_magic_tokens.reference_materials` to the allow-lists (removes `_magic_token`, D8), BEFORE INSERT OR UPDATE guards on both tables for every role (23514). No policy or grant change. Requires the step C code deployed first. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 

@@ -9,8 +9,8 @@
 -- the line "-- >>> 120 BODY START" to the line "-- <<< 120 BODY END" inclusive: the whole body
 -- between BEGIN; and COMMIT;. Both files carry those two marker lines, so the copies can be compared
 -- mechanically. If you edit the migration, re-copy the marked block here and re-check.
--- Checked 2026-10-15 (feat/rfp-record-c): the md5 of the marked block is the same in both files
--- (migration lines 154-539, this file's lines 545-930).
+-- Checked 2026-10-15 (feat/rfp-record-c) with cmp: the marked block is byte-identical in both files
+-- (21311 bytes; migration lines 154-539, this file's lines 548-933).
 --
 -- 118 AND 119 ARE LIVE (applied and verified 2026-10-14). This test applies only 120, inside its own
 -- transaction, between phase 1 and phase 2, and rolls everything back at the end: THE SCRUB RUNS FOR

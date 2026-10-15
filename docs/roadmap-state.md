@@ -1,5 +1,17 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-15 (feat/rfp-record-c). THIS BANNER SUPERSEDES THE ONES BELOW.** Step C code and
+> **120** (the vendor copy scrub and its guard) are authored on `feat/rfp-record-c`; **120 is NOT
+> applied**. Next free number: **120** until it is applied, then **121**. Report:
+> `docs/rfp-record-c-report.md`; test script parts I-L in `docs/rfp-record-test-script.md`.
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **Step C + 120** (`feat/rfp-record-c`): deploy the code (it works before and after 120), run
+>    `supabase/sql-checks/120-key-inventory.sql`, then 120's pre-apply test, dry run, apply. Owner
+>    decisions F1-F4 in the report (budget on rows step A wrote, the token in `scope_item_id`, old
+>    notifications carrying `magicToken`, the post-award client name).
+> 2. **The actuals feeder**, migration 121 or later.
+
 > **UPDATED 2026-10-14 (owner; recorded 2026-10-15 on feat/rfp-record-c). THIS BANNER SUPERSEDES THE
 > ONES BELOW.** **119 is applied and verified (2026-10-14)**: pre-apply 33/33 PASS, dry run and
 > rollback proven; 44 records (43 backfilled: wizard 23, Lightning 20, plus smoke test `21f9d17d`),
