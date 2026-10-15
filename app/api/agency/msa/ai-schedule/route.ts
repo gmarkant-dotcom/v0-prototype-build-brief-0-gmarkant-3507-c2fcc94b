@@ -5,6 +5,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { agencyGateRefusal } from "@/lib/api-auth"
 import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { agencyEstimateFor, readLineEstimatedBudgets } from "@/lib/server/rfp-record"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
@@ -31,6 +32,7 @@ function unwrapInbox(
         scope_item_description?: string | null
         estimated_budget?: string | null
         timeline?: string | null
+        rfp_line_id?: string | null
       }
     | null
     | undefined
@@ -46,6 +48,7 @@ function unwrapInbox(
     scope_item_description?: string | null
     estimated_budget?: string | null
     timeline?: string | null
+    rfp_line_id?: string | null
   }
 }
 
@@ -112,7 +115,8 @@ export async function POST(req: Request) {
           scope_item_name,
           scope_item_description,
           estimated_budget,
-          timeline
+          timeline,
+          rfp_line_id
         )
       `
       )
@@ -171,7 +175,10 @@ export async function POST(req: Request) {
 
     const scopeName = (inbox.scope_item_name || "").trim() || "Scope"
     const scopeDesc = (inbox.scope_item_description || "").trim()
-    const inboxBudget = (inbox.estimated_budget || "").trim()
+    // Step C: the agency's own estimate, from its RFP record line for a linked row
+    // (partner_rfp_inbox.estimated_budget is the vendor's released figure since step C).
+    const lineEstimates = await readLineEstimatedBudgets(supabase, "POST /api/agency/msa/ai-schedule", [inbox.rfp_line_id], callerOrgIds)
+    const inboxBudget = (agencyEstimateFor(inbox, lineEstimates) || "").trim()
     const inboxTimeline = (inbox.timeline || "").trim()
 
     const partnerCtx = partnerProfile

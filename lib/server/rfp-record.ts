@@ -413,8 +413,8 @@ export async function readTokenLinksByResponse(
 
 /**
  * The guest-bid join (step B): the inbox row a token is attached to, from
- * rfp_magic_tokens.attached_inbox_id. Null when the token has none or the column cannot be read;
- * the caller then keeps the master_rfp_json._magic_token join as the fallback.
+ * rfp_magic_tokens.attached_inbox_id. Null when the token has none or the column cannot be read.
+ * Step C: the only join (the master_rfp_json._magic_token fallback is gone; 120 scrubs it).
  */
 export async function readTokenAttachedInboxId(
   client: RfpRecordClient,
@@ -510,6 +510,53 @@ export async function readRecordLines(
     })
   }
   return out
+}
+
+/**
+ * STEP C. The agency's own estimate for a scope line. From step C on, partner_rfp_inbox.estimated_budget
+ * is the VENDOR's figure: the line's released budget (D2), NULL when not released
+ * (lib/rfp-vendor-copy.ts). An agency reader that wants its internal estimate reads the record line
+ * for a linked row; the inbox column stays the answer only for an unlinked row (sent before step A
+ * and not backfilled), where it always held the estimate. Read under the caller's RLS and org filter,
+ * on the agency session after G1, like every read above. A linked row whose line cannot be read
+ * answers null, never the vendor's figure.
+ */
+export async function readLineEstimatedBudgets(
+  client: RfpRecordClient,
+  site: string,
+  lineIds: readonly (string | null | undefined)[],
+  orgIds: readonly OrgId[]
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const ids = nonEmptyIds(lineIds)
+  if (ids.length === 0 || orgIds.length === 0) return out
+  const { data, error } = await client
+    .from(LINES)
+    .select("id, estimated_budget")
+    .in("id", ids)
+    .in("lead_org_id", orgIds as OrgId[])
+  if (error) {
+    console.error("[rfp-record] line estimate read failed; linked rows answer with no estimate", {
+      site,
+      code: error.code,
+      message: error.message,
+    })
+    return out
+  }
+  for (const row of (data || []) as Array<{ id: string; estimated_budget: string | null }>) {
+    out.set(row.id, trimmedOrNull(row.estimated_budget))
+  }
+  return out
+}
+
+/** The agency's estimate for one inbox row: the record line's when linked, the column's when not. */
+export function agencyEstimateFor(
+  row: { rfp_line_id?: string | null; estimated_budget?: string | null } | null | undefined,
+  lineEstimates: Map<string, string | null>
+): string | null {
+  if (!row) return null
+  if (row.rfp_line_id) return lineEstimates.get(row.rfp_line_id) ?? null
+  return row.estimated_budget ?? null
 }
 
 /** Resolves a resolution from a line id and the views already read. */

@@ -31,7 +31,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, nda_gate_enforced, agency_nda_notified_at, master_rfp_json"
+        // Step C: master_rfp_json was selected here and never read.
+        "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, nda_gate_enforced, agency_nda_notified_at"
       )
       .eq("id", id)
       .maybeSingle<{
@@ -43,7 +44,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         scope_item_name: string | null
         nda_gate_enforced: boolean | null
         agency_nda_notified_at: string | null
-        master_rfp_json: Record<string, unknown> | null
       }>()
 
     if (inboxError) return NextResponse.json({ error: "Failed to load RFP" }, { status: 500 })

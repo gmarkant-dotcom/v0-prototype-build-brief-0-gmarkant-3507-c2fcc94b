@@ -93,7 +93,6 @@ import {
   FileText,
   Building2,
   Calendar,
-  DollarSign,
   Send,
   Upload,
   CheckCircle,
@@ -366,17 +365,20 @@ function formatDeadlineDate(value?: string | null): string | null {
   })
 }
 
+/**
+ * The vendor's copy of the RFP (lib/rfp-vendor-copy.ts allow-list). Step C (leak #8): no client
+ * name, programme budget or other scope lines are rendered from it; the client name, when the
+ * agency shows it, is `inbox.client_name` (client_name_released) and the vendor's own line is the
+ * scope section above.
+ */
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
   if (!json || typeof json !== "object") {
     return <p className="text-sm text-vendor-muted">No master RFP content available.</p>
   }
   const projectName = typeof json.projectName === "string" ? json.projectName : ""
-  const client = typeof json.client === "string" ? json.client : ""
   const overview = typeof json.overview === "string" ? json.overview : ""
   const objectives = Array.isArray(json.objectives) ? json.objectives.filter((x) => typeof x === "string") : []
-  const totalBudget = typeof json.totalBudget === "string" ? json.totalBudget : ""
   const timeline = typeof json.timeline === "string" ? json.timeline : ""
-  const scopeItems = Array.isArray(json.scopeItems) ? json.scopeItems : []
   const requiredCriteria = normalizeBusinessCriteriaRequired(json.business_criteria_required)
   const requiredDesignationKeys = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
   const requiredInsuranceKeys = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
@@ -388,7 +390,6 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
       <div>
         <h4 className="font-display font-bold text-vendor-foreground mb-1">Project</h4>
         <p>{projectName || "-"}</p>
-        {client && <p className="text-vendor-muted-strong mt-1">Client: {client}</p>}
       </div>
       {overview && (
         <div>
@@ -406,46 +407,13 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
           </ul>
         </div>
       )}
-      {(totalBudget || timeline) && (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {totalBudget && (
-            <div className="flex gap-2 items-start">
-              <DollarSign className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
-              <div>
-                <div className="font-mono text-2xs uppercase text-vendor-muted">Program budget (master)</div>
-                <div>{totalBudget}</div>
-              </div>
-            </div>
-          )}
-          {timeline && (
-            <div className="flex gap-2 items-start">
-              <Calendar className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
-              <div>
-                <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline (master)</div>
-                <div>{timeline}</div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      {scopeItems.length > 0 && (
-        <div>
-          <h4 className="font-display font-bold text-vendor-foreground mb-2">All scope items (master RFP)</h4>
-          <ul className="space-y-3">
-            {scopeItems.map((item: unknown, i: number) => {
-              const s = item as { name?: string; description?: string; estimatedBudget?: string; timeline?: string }
-              return (
-                <li key={i} className="border border-vendor-border/50 rounded-lg p-3 bg-vendor-background/80">
-                  <div className="font-medium text-vendor-foreground">{s.name || `Item ${i + 1}`}</div>
-                  {s.description && <p className="text-vendor-muted-strong mt-1">{s.description}</p>}
-                  <div className="font-mono text-2xs text-vendor-muted mt-2 flex flex-wrap gap-3">
-                    {s.estimatedBudget && <span>Budget: {s.estimatedBudget}</span>}
-                    {s.timeline && <span>Timeline: {s.timeline}</span>}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+      {timeline && (
+        <div className="flex gap-2 items-start">
+          <Calendar className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
+          <div>
+            <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline (master)</div>
+            <div>{timeline}</div>
+          </div>
         </div>
       )}
       {hasRequiredCriteria && (
@@ -496,14 +464,9 @@ const demoInbox: InboxRow = {
   created_at: new Date().toISOString(),
   master_rfp_json: {
     projectName: "Sports Creator Series",
-    client: "Confidential brand",
     overview: "Documentary-style creator content for a national sports narrative.",
     objectives: ["Grow audience among 18–34", "Deliver platform-native cuts"],
-    totalBudget: "Mid–six-figure program",
     timeline: "6 months rolling",
-    scopeItems: [
-      { id: "s1", name: "Video production", description: "Principal production and post.", estimatedBudget: "$85k–$110k", timeline: "12 weeks" },
-    ],
   },
 }
 
@@ -1560,7 +1523,8 @@ export default function PartnerRfpDetailPage() {
             <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-vendor-border/50">
               {inbox.estimated_budget && (
                 <div>
-                  <div className="font-mono text-2xs uppercase text-vendor-muted">Estimated budget (scope line)</div>
+                  {/* Step C: the budget the agency released for this line (D2), never its internal estimate. */}
+                  <div className="font-mono text-2xs uppercase text-vendor-muted">Budget (scope line)</div>
                   <div className="text-vendor-foreground font-medium">{inbox.estimated_budget}</div>
                 </div>
               )}

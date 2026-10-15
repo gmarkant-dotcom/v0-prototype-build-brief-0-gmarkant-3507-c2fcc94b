@@ -13,6 +13,7 @@ import {
   type MagicTokenForAttach,
 } from "@/lib/magic-token-attach"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
+import { VENDOR_INBOX_LIST_COLUMNS } from "@/lib/rfp-vendor-copy"
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -228,9 +229,14 @@ export async function GET() {
     // whole access check: a vendor has to SEE an NDA-gated RFP to know there is an NDA to
     // sign. The detail route still refuses its contents. That difference is the reason the
     // ownership test is a separate exported function.
+    //
+    // STEP C (leak #8): an explicit column list, never "*". The whole row carried the agency's
+    // vendor copy (client name, every line's budget, the rubric, _magic_token) for every row,
+    // NDA-gated ones included, and the invite token and 'magic:<token>' scope id beside it. The
+    // list renders none of that. See lib/rfp-vendor-copy.ts.
     const { data, error } = await supabase
       .from("partner_rfp_inbox")
-      .select("*")
+      .select(VENDOR_INBOX_LIST_COLUMNS)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -241,7 +247,7 @@ export async function GET() {
       )
     }
 
-    const unscopedRows = data || []
+    const unscopedRows = (data || []) as unknown as Record<string, unknown>[]
     const rows = unscopedRows.filter((row) =>
       vendorOwnsPartnerRfpInboxRow(
         {
@@ -274,7 +280,7 @@ export async function GET() {
     // through current_user_visible_profile_ids(), which share their counterparty definition
     // by construction. An agency with no partnership to this vendor resolves to null and
     // the button does not render, which is correct rather than merely unchanged.
-    const agencyIds = Array.from(new Set(rows.map((r) => r.lead_org_id).filter(Boolean)))
+    const agencyIds = Array.from(new Set(rows.map((r) => r.lead_org_id as string | null).filter((id): id is string => Boolean(id))))
     let agencyMeetingUrlById: Record<string, string | null> = {}
     if (agencyIds.length > 0) {
       const { data: agencyOrgs, error: agencyOrgsErr } = await supabase
@@ -293,20 +299,11 @@ export async function GET() {
         if (contact.orgId) agencyMeetingUrlById[contact.orgId] = contact.contactMeetingUrl
       }
     }
-    // LEFT JOIN: get client_name from projects (rows without project_id stay in list with null)
-    const projectIds = [...new Set(rows.map((r) => r.project_id as string | null).filter((id): id is string => typeof id === "string" && id.length > 0))]
-    let clientNameByProjectId: Record<string, string | null> = {}
-    if (projectIds.length > 0) {
-      const { data: projectRows } = await supabase
-        .from("projects")
-        .select("id, client_name")
-        .in("id", projectIds)
-      clientNameByProjectId = Object.fromEntries(
-        (projectRows || []).map((p) => [p.id as string, (p.client_name as string | null) ?? null])
-      )
-    }
+    // STEP C (leak #8): the client name comes ONLY from partner_rfp_inbox.client_name_released,
+    // which the lead agency's per-RFP toggle sets (D3, hidden by default). The projects.client_name
+    // join that stood here is gone: it showed the client to any vendor RLS let read the project.
 
-    const inboxIds = rows.map((r) => r.id).filter(Boolean)
+    const inboxIds = rows.map((r) => r.id as string).filter(Boolean)
     let responseByInboxId: Record<string, { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }> = {}
     if (inboxIds.length > 0) {
       const { data: responses } = await supabase
@@ -322,25 +319,35 @@ export async function GET() {
         }
       }
     }
+    // Built field by field, never a spread row: only what components/partner-rfp-surface.tsx reads.
     const mergedRows = rows.map((row) => {
-      const master = (row.master_rfp_json || {}) as Record<string, unknown>
       const responseDeadline =
         (typeof row.response_deadline === "string" && row.response_deadline) ||
-        (typeof master.response_deadline === "string" && master.response_deadline) ||
+        (typeof row.legacy_response_deadline === "string" && row.legacy_response_deadline) ||
         null
       const resp = responseByInboxId[row.id as string]
       const effectiveStatus = (resp?.status || row.status || "new") as string
       return {
-        ...row,
+        id: row.id as string,
+        lead_org_id: (row.lead_org_id as string | null) ?? null,
+        scope_item_name: (row.scope_item_name as string | null) ?? null,
+        scope_item_description: (row.scope_item_description as string | null) ?? null,
+        agency_company_name: (row.agency_company_name as string | null) ?? null,
+        status: (row.status as string | null) ?? null,
         created_at: (row.created_at as string | null) ?? null,
         viewed_at: (row.viewed_at as string | null) ?? null,
+        partner_intent: (row.partner_intent as string | null) ?? null,
+        intent_set_at: (row.intent_set_at as string | null) ?? null,
+        nda_gate_enforced: (row.nda_gate_enforced as boolean | null) ?? null,
+        nda_confirmed_at: (row.nda_confirmed_at as string | null) ?? null,
+        closed_at: (row.closed_at as string | null) ?? null,
         response_deadline: responseDeadline,
         response_status: resp?.status || null,
         effective_status: effectiveStatus,
         agency_feedback: resp?.agency_feedback || null,
         feedback_updated_at: resp?.feedback_updated_at || null,
         agency_meeting_url: agencyMeetingUrlById[row.lead_org_id as string] || null,
-        client_name: clientNameByProjectId[(row.project_id as string | null) ?? ""] ?? null,
+        client_name: (row.client_name_released as string | null) ?? null,
       }
     })
     return NextResponse.json({ rfps: mergedRows }, { headers: revalidateHeaders })

@@ -163,7 +163,7 @@ export async function GET() {
       supabase
         .from("partner_rfp_inbox")
         .select(
-          "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
+          "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at, client_name_released"
         )
         .order("created_at", { ascending: false }),
       supabase
@@ -281,8 +281,8 @@ export async function GET() {
         ? supabase.from("organizations").select(ORG_CONTACT_SELECT).in("id", Array.from(agencyIds))
         : Promise.resolve({ data: [] as unknown[], error: null }),
       projectIds.size > 0
-        ? supabase.from("projects").select("id, name, client_name").in("id", Array.from(projectIds))
-        : Promise.resolve({ data: [] as { id: string; name: string | null; client_name: string | null }[], error: null }),
+        ? supabase.from("projects").select("id, name").in("id", Array.from(projectIds))
+        : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null }),
     ])
 
     const agencyNameById = new Map<string, string>()
@@ -293,10 +293,8 @@ export async function GET() {
       const name = (contact.orgName || contact.contactFullName || "").trim()
       if (a.id) agencyNameById.set(a.id as string, name || "Lead agency")
     }
-    const clientNameByProjectId = new Map<string, string | null>()
     const projectNameById = new Map<string, string>()
     for (const p of projectsRes.data || []) {
-      clientNameByProjectId.set(p.id as string, (p.client_name as string | null) ?? null)
       projectNameById.set(p.id as string, (p.name as string | null) || "Project")
     }
 
@@ -351,7 +349,9 @@ export async function GET() {
         id: row.id as string,
         scopeItemName: (row.scope_item_name as string | null) || "Scope",
         agencyName: agencyNameById.get(row.lead_org_id as string) || "Lead agency",
-        clientName: clientNameByProjectId.get((row.project_id as string | null) ?? "") ?? null,
+        // Step C (leak #8): the client name only when the lead agency released it for this RFP
+        // (partner_rfp_inbox.client_name_released, 118), never projects.client_name.
+        clientName: (row.client_name_released as string | null) ?? null,
         deadline,
         daysLeft,
         ndaPending: row.nda_gate_enforced === true && !row.nda_confirmed_at,

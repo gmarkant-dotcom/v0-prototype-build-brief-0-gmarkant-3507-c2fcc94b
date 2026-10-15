@@ -10,7 +10,7 @@ import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/bu
 import { normalizeBudgetLines } from "@/lib/budget-categories"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
-import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { markBidSummaryPending } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
@@ -18,7 +18,8 @@ import { isRfpClosureStatus } from "@/lib/rfp-closure"
 
 export const dynamic = "force-dynamic"
 
-/** Service role, for the one write this vendor route makes on the agency's behalf (the AI summary). */
+/** Service role, for the one write this vendor route makes on the agency's behalf: marking a
+ *  revised bid's AI summary pending (ruling S-A). */
 function getServiceClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -417,26 +418,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         })
       }
 
-      // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      // 109: the summary is the LEAD AGENCY's and is written to partner_rfp_response_private,
-      // which has no vendor policy, so it cannot be written with this vendor's session. The
-      // service role writes it, scoped to the inbox's lead organization, exactly as the guest
-      // route already does. This route has already proved the vendor owns `saved` (it was
-      // written under the vendor's own session above).
-      const summaryClient = getServiceClient()
-      if (!summaryClient) {
-        console.error("[api] summary generation skipped: SUPABASE_SERVICE_ROLE_KEY is not configured", {
-          route,
-          responseId: saved.id,
-        })
-      } else {
-        void generateAndSaveBidSummary(summaryClient, saved.id, orgIdsFromColumns(inbox.lead_org_id)).catch((err) => {
-          console.error("[api] fire-and-forget summary generation failed", {
+      // RULING S-A (2026-10-14): no AI summary is generated here. The bid saves with its summary
+      // pending (ai_summary_generated_at NULL) and the agency generates it through its own
+      // generate-summary route, which reads the agency's RFP record; this vendor request must not
+      // (D1). A REVISION marks the old summary pending again, since it describes the old bid.
+      // 109: that table has no vendor policy, so the service role writes the three NULLs, scoped
+      // to the inbox's lead organization. This route has already proved the vendor owns `saved`
+      // (it was written under the vendor's own session above).
+      if (wasUpdate) {
+        const summaryClient = getServiceClient()
+        if (!summaryClient) {
+          console.error("[api] could not mark the summary pending: SUPABASE_SERVICE_ROLE_KEY is not configured", {
             route,
             responseId: saved.id,
-            message: err instanceof Error ? err.message : String(err),
           })
-        })
+        } else {
+          await markBidSummaryPending(summaryClient, saved.id, orgIdsFromColumns(inbox.lead_org_id))
+        }
       }
 
       // Agency notification (email + in-app) on every submitted transition - initial
@@ -447,7 +445,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // the pre-079 lookup would have failed silently for a new organization.
       const [agencyRecipients, { data: inboxDetail }] = await Promise.all([
         resolveOrgNotificationRecipients(inbox.lead_org_id, supabase),
-        supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
+        // Step C: only the one allow-listed key this email uses, not the whole vendor copy.
+        supabase
+          .from("partner_rfp_inbox")
+          .select("scope_item_name, project_name:master_rfp_json->>projectName")
+          .eq("id", inboxId)
+          .maybeSingle(),
       ])
       if (agencyRecipients.length === 0) {
         console.error("[api] bid submit: no notification recipients for the lead agency", {
@@ -456,9 +459,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         })
       }
       const agencyProfile = agencyRecipients[0] ?? null
-      const projectName =
-        (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
-      const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
+      const projectName = (inboxDetail?.project_name as string | null | undefined)?.toString?.() || "Project"
+      const scopeItemName = (inboxDetail?.scope_item_name as string | null | undefined) || "Scope item"
       if (agencyProfile?.email) {
         try {
           const agencyRecipient =

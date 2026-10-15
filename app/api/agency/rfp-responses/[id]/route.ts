@@ -44,7 +44,7 @@ function getServiceSupabase() {
  * missing, it was on the originating `rfp_magic_tokens` row the whole time.
  *
  * The award path already resolves both of this shape's sources - the G1-synthesized inbox
- * row found by the `master_rfp_json._magic_token` marker, then the token row itself - which
+ * row (found through `rfp_magic_tokens.attached_inbox_id` since step C), then the token row itself - which
  * is why `bid.award` never had the gap. This is that same resolution, factored out for the
  * two emitters that had neither.
  *
@@ -68,10 +68,12 @@ function projectNameFromMaster(master: unknown): string | null {
 }
 
 /**
- * STEP B, the guest-bid join. The G1-synthesized inbox row for an invitation, found through
- * rfp_magic_tokens.attached_inbox_id first; the master_rfp_json._magic_token marker is the
- * fallback for a token that carries no attached_inbox_id (sent before step A and not backfilled,
- * or attached by a vendor-side path that does not set it yet). Session client, caller's
+ * The guest-bid join. The G1-synthesized inbox row for an invitation, found through
+ * rfp_magic_tokens.attached_inbox_id ONLY. STEP C removed the master_rfp_json._magic_token
+ * fallback: migration 120 scrubs that marker (D8), and after 119 every live invitation row is
+ * reachable through attached_inbox_id (120's pre-flight refuses to run otherwise); the vendor-side
+ * attach paths set it from step C on. A token with no attached row answers null, which every
+ * caller already handles (the token row itself is the fallback context). Session client, caller's
  * organizations only, on both reads.
  */
 async function findSynthesizedInboxForToken<T>(
@@ -79,20 +81,12 @@ async function findSynthesizedInboxForToken<T>(
   { token, callerOrgIds, columns }: { token: string; callerOrgIds: OrgId[]; columns: string }
 ): Promise<{ data: T | null; error: { message: string; code?: string } | null }> {
   const attachedInboxId = await readTokenAttachedInboxId(supabase, RECORD_READ_SITE, token, callerOrgIds)
-  if (attachedInboxId) {
-    const { data, error } = await supabase
-      .from("partner_rfp_inbox")
-      .select(columns)
-      .eq("id", attachedInboxId)
-      .in("lead_org_id", callerOrgIds)
-      .maybeSingle()
-    if (error || data) return { data: (data as T | null) ?? null, error }
-  }
+  if (!attachedInboxId) return { data: null, error: null }
   const { data, error } = await supabase
     .from("partner_rfp_inbox")
     .select(columns)
+    .eq("id", attachedInboxId)
     .in("lead_org_id", callerOrgIds)
-    .contains("master_rfp_json", { _magic_token: token })
     .maybeSingle()
   return { data: (data as T | null) ?? null, error }
 }
@@ -383,8 +377,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      * award." Three cases handled below: a real inbox row (portal-origin, sync as before), no
      * inbox row anywhere (guest-origin, resolve project/partnership from the originating
      * rfp_magic_tokens row instead and skip inbox sync entirely), and a G1-synthesized inbox
-     * row that already exists for this same invitation (found via the master_rfp_json.
-     * _magic_token marker) - linked onto the response permanently so this and every future
+     * row that already exists for this same invitation (found via rfp_magic_tokens.
+     * attached_inbox_id since step C) - linked onto the response permanently so this and every future
      * PATCH takes the normal first path from then on.
      */
     type AwardContext = {
@@ -463,7 +457,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
 
         if (tokenRow?.token) {
-          // STEP B: attached_inbox_id first, the _magic_token marker as the fallback.
+          // STEP C: attached_inbox_id only (the _magic_token marker is scrubbed by 120).
           const { data: synthesized, error: synthErr } = await findSynthesizedInboxForToken<InboxForAward>(supabase, {
             token: tokenRow.token as string,
             callerOrgIds,

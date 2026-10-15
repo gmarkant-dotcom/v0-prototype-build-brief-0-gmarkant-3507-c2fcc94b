@@ -4,11 +4,13 @@
  * page (app/agency/magic-rfp/page.tsx).
  *
  * RFP_VENDOR_COPY_SCRUBBED says whether vendors' copies of an RFP honour these choices yet. Step A
- * stores them on the agency's RFP record, but vendors still receive the full copy (every line's
- * budget, the program budget, the client name) until step C writes per-vendor copies. Step C flips
- * this to true, and the copy below stops telling the agency the setting is not yet in effect.
+ * stored them on the agency's RFP record while vendors still received the full copy. Step C (true
+ * since then) writes per-vendor copies (lib/rfp-vendor-copy.ts) and every vendor and guest reader
+ * takes the client name and budget only from the release columns, so a change takes effect for
+ * vendors immediately. Old copies still holding the removed keys are no longer read by any vendor
+ * screen before migration 120 scrubs them.
  */
-export const RFP_VENDOR_COPY_SCRUBBED = false
+export const RFP_VENDOR_COPY_SCRUBBED = true
 
 export const SHOW_CLIENT_TO_VENDORS_LABEL = "Show client name to vendors"
 
@@ -18,7 +20,7 @@ export const SHOW_CLIENT_TO_VENDORS_HINT = RFP_VENDOR_COPY_SCRUBBED
 
 /** Step B: the same toggle on an RFP that has already been sent (bids page). */
 export const SHOW_CLIENT_TO_VENDORS_EXISTING_HINT = RFP_VENDOR_COPY_SCRUBBED
-  ? "Vendors on this RFP see the client name only while this is on."
+  ? "Vendors on this RFP see the client name only while this is on. A change reaches them immediately."
   : "Saved on your RFP record now. Vendors still see the client name in this release; this setting takes effect for vendors in the next release."
 
 export const SHOW_CLIENT_TO_VENDORS_NOT_ENABLED = "This setting cannot be changed yet. Nothing was changed."

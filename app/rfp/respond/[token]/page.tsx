@@ -105,7 +105,8 @@ type TokenRow = {
 
 type ProjectData = {
   name: string
-  /** Not sent to guests (client name hidden by default; no per-RFP toggle exists yet). */
+  /** Step C: sent only when the lead agency shows the client to vendors on this RFP
+   *  (rfp_magic_tokens.client_name_released, D3); absent or null otherwise. */
   client_name?: string | null
   /** Not sent to guests (vendors see only the budget released for their own scope line). */
   budget_range?: string | null
