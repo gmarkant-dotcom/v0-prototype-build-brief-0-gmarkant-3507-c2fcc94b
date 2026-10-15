@@ -96,9 +96,9 @@ section1 AS (
              CASE WHEN a.col = 'partner_rfp_inbox.master_rfp_json' AND a.key <> '(null)' THEN 'REFUSED BY 120 (not an object)'
                   ELSE 'unchanged' END
            WHEN a.col = 'partner_rfp_inbox.master_rfp_json' THEN
-             CASE WHEN a.key = ANY ((SELECT k FROM allow_inbox)) THEN 'KEEP' ELSE 'REMOVE' END
+             CASE WHEN a.key IN (SELECT unnest(k) FROM allow_inbox) THEN 'KEEP' ELSE 'REMOVE' END
            WHEN a.col = 'rfp_magic_tokens.reference_materials' THEN
-             CASE WHEN a.key = ANY ((SELECT k FROM allow_token)) THEN 'KEEP' ELSE 'REMOVE' END
+             CASE WHEN a.key IN (SELECT unnest(k) FROM allow_token) THEN 'KEEP' ELSE 'REMOVE' END
            ELSE 'NOT SCRUBBED (whole-value token column; agency-only RLS; the guest API sends an explicit view)'
          END AS action_120
   FROM all_keys a
@@ -116,7 +116,7 @@ removed_linked AS (
   JOIN public.rfp_record_lines l ON l.id = i.rfp_line_id
   JOIN public.rfp_records r ON r.id = l.rfp_id
   CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(i.master_rfp_json) = 'object' THEN i.master_rfp_json ELSE '{}'::jsonb END) AS e(key, value)
-  WHERE NOT (e.key = ANY ((SELECT k FROM allow_inbox)))
+  WHERE NOT (e.key IN (SELECT unnest(k) FROM allow_inbox))
     AND e.value IS NOT NULL AND e.value NOT IN ('null'::jsonb, '""'::jsonb, '[]'::jsonb, '{}'::jsonb)
     AND NOT (jsonb_typeof(e.value) = 'string' AND btrim(e.value #>> '{}') = '')
     AND NOT (
