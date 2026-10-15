@@ -55,8 +55,10 @@ import {
   RELEASE_BUDGET_HINT,
   RELEASE_BUDGET_LABEL,
   SHOW_CLIENT_TO_VENDORS_HINT,
-  SHOW_CLIENT_TO_VENDORS_LABEL,
 } from "@/lib/rfp-record-copy"
+import { ClientVisibilitySwitch } from "@/components/rfp-client-visibility-control"
+import { VendorTextWarnings } from "@/components/vendor-text-warnings"
+import { lineVendorTextFields, sharedVendorTextFields } from "@/lib/rfp-vendor-text-check"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
@@ -1102,6 +1104,30 @@ function AgencyRFPContent() {
   // Remove scope item
   const removeScopeItem = (itemId: string) => {
     setScopeItems(prev => prev.filter(item => item.id !== itemId))
+  }
+
+  /**
+   * OV-A: an accepted vendor-safe rewrite goes back into the field it came from. Field ids are the
+   * ones lib/rfp-vendor-text-check.ts builds: projectName, overview, objectives.<i>, timeline, and
+   * line.<scope item id>.name|description|timeline (the scope items the broadcast sends).
+   */
+  const applyVendorText = (field: string, text: string) => {
+    const lineMatch = /^line\.(.+)\.(name|description|timeline)$/.exec(field)
+    if (lineMatch) {
+      const [, itemId, key] = lineMatch
+      setScopeItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, [key]: text } : item)))
+      return
+    }
+    const objectiveMatch = /^objectives\.(\d+)$/.exec(field)
+    setMasterRfp((prev) => {
+      if (!prev) return prev
+      if (objectiveMatch) {
+        const index = Number(objectiveMatch[1])
+        return { ...prev, objectives: prev.objectives.map((o, i) => (i === index ? text : o)) }
+      }
+      if (field === "projectName" || field === "overview" || field === "timeline") return { ...prev, [field]: text }
+      return prev
+    })
   }
   
   // Toggle partner selection
@@ -2968,14 +2994,12 @@ function AgencyRFPContent() {
               </div>
 
               <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={showClientToVendors}
-                    onCheckedChange={(v) => setShowClientToVendors(v === true)}
-                    className="border-border"
-                  />
-                  <span className="font-mono text-xs text-foreground">{SHOW_CLIENT_TO_VENDORS_LABEL}</span>
-                </label>
+                {/* B3: the same control as each RFP on /agency/bids; here it is a choice sent with the RFP. */}
+                <ClientVisibilitySwitch
+                  visible={showClientToVendors}
+                  onToggle={() => setShowClientToVendors((v) => !v)}
+                  clientName={clientSelection.clientName || masterRfp?.client || selectedProject?.client || null}
+                />
                 <p className="font-mono text-2xs text-foreground-muted">{SHOW_CLIENT_TO_VENDORS_HINT}</p>
               </div>
 
@@ -3057,6 +3081,30 @@ function AgencyRFPContent() {
               </GlassCard>
             )}
             
+            {/* OV-A: warn at send, never block. Broadcasting works with or without a change. */}
+            {masterRfp && (
+              <VendorTextWarnings
+                projectId={selectedProject?.id ?? null}
+                onApply={applyVendorText}
+                input={{
+                  clientHidden: !showClientToVendors,
+                  clientNames: [masterRfp.client, clientSelection.clientName, selectedProject?.client],
+                  fields: [
+                    ...sharedVendorTextFields(masterRfp),
+                    ...outsourcedItems.flatMap((item) =>
+                      lineVendorTextFields({
+                        key: item.id,
+                        name: item.name,
+                        description: item.description,
+                        timeline: item.timeline,
+                        budgetReleased: releaseBudgetByScope[item.id] === true && Boolean(item.estimatedBudget?.trim()),
+                      })
+                    ),
+                  ],
+                }}
+              />
+            )}
+
             {broadcastError && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200">
                 {broadcastError}
