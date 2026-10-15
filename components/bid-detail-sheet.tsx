@@ -37,6 +37,7 @@ import { HelpTerm } from "@/components/help-term"
 import type { GlossaryKey } from "@/lib/glossary"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
+import { requestBidSummary } from "@/lib/bid-summary-queue"
 import { BidEvaluationTab, type BidEvaluationTabHandle } from "@/components/bid-evaluation-tab"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -201,17 +202,20 @@ function BidDetailSheetInner({
   // the blocking modal only for the former, since popping it just from opening a bid
   // (before the user asked for anything) would be jarring, especially when browsing several
   // bids in a row while already at the cap. The automatic path still shows the inline error.
+  // Ruling S-A: through the shared queue (lib/bid-summary-queue.ts), so opening a bid whose summary
+  // the bids page is already warming up joins that call instead of starting a second one, and the
+  // route skips a bid that already has a complete summary.
   const generateAnalysis = async (isManualRetry = false) => {
     if (isManualRetry && !guardAction("ai_analyses")) return
     setAnalysisGenerating(true)
     setAnalysisError(null)
     try {
-      const res = await fetch(`/api/agency/bids/${row.id}/generate-summary`, { method: "POST" })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        if (isManualRetry && handleUsageLimitError(res.status, data)) return
-        throw new Error(data?.error || "Analysis unavailable")
+      const result = await requestBidSummary(row.id)
+      if (!result.ok) {
+        if (isManualRetry && handleUsageLimitError(result.status, result.data)) return
+        throw new Error(result.error)
       }
+      const data = result.data
       setRow((prev) => ({
         ...prev,
         ai_summary_short: data.ai_summary_short ?? prev.ai_summary_short,
@@ -235,7 +239,7 @@ function BidDetailSheetInner({
     }
   }
 
-  // Auto-generate the detailed summary on sheet open if it doesn't exist yet.
+  // Auto-generate the detailed summary on sheet open if it doesn't exist yet (pending since S-A).
   useEffect(() => {
     if (row.response_exists && !row.ai_summary_detailed) {
       void generateAnalysis(false)
@@ -491,7 +495,7 @@ function BidDetailSheetInner({
                   </div>
                   {analysisGenerating ? (
                     <div className="space-y-2">
-                      <p className="text-xs text-foreground-muted">Generating analysis...</p>
+                      <p className="text-xs text-foreground-muted">Generating summary...</p>
                       <Skeleton className="h-3 w-full bg-white/10" />
                       <Skeleton className="h-3 w-full bg-white/10" />
                       <Skeleton className="h-3 w-2/3 bg-white/10" />

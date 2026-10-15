@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { generateAndSaveBidSummary, isBidSummaryComplete, readBidSummary } from "@/lib/bid-summary-generation"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
@@ -19,13 +19,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    // Deliberately NOT agencyEntitlementId() below: that resolver falls back to the user id
+    // when membership does not resolve, which is right for a quota row and wrong for a filter.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
+    // RULING S-A: this route is the ONLY place a bid summary is generated, and the bids page calls
+    // it in the background for every pending bid (warm-up), so it is IDEMPOTENT: unless the body
+    // says { force: true } (the explicit "Regenerate"), a bid that already has both halves of its
+    // summary is answered from what is stored, with no AI call and no usage counted. The read is
+    // the caller's own (109's private table, lead_org_id in the caller's organizations).
+    const body = (await req.json().catch(() => null)) as { force?: unknown } | null
+    const force = body?.force === true
+    if (!force) {
+      try {
+        const stored = await readBidSummary(supabase, responseId, callerOrgIds)
+        if (isBidSummaryComplete(stored)) {
+          return NextResponse.json({
+            ok: true,
+            ai_summary_short: stored.ai_summary_short,
+            ai_summary_detailed: stored.ai_summary_detailed,
+            ai_summary_generated_at: stored.ai_summary_generated_at,
+            short_failed: false,
+            detailed_failed: false,
+            skipped: true,
+          })
+        }
+      } catch (readErr) {
+        // Not fatal: generating is the fallback, exactly what this route did before S-A.
+        console.error("[api] generate-summary: stored summary read failed, generating", {
+          route,
+          responseId,
+          message: readErr instanceof Error ? readErr.message : String(readErr),
+        })
+      }
+    }
+
     const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
-    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
-    // Deliberately NOT agencyEntitlementId() above it: that resolver falls back to the user id
-    // when membership does not resolve, which is right for a quota row and wrong for a filter.
-    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     // Step B: the agency's session, after G1 (requireAgencyRole), reads its own RFP record.
     const result = await generateAndSaveBidSummary(supabase, responseId, callerOrgIds, "session")
     if (!result.ok) {
@@ -36,7 +68,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     }
 
     await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
-    return NextResponse.json(result)
+    return NextResponse.json({ ...result, skipped: false })
   } catch (error) {
     console.error("[api] failure", {
       route: "/api/agency/bids/[responseId]/generate-summary",

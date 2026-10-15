@@ -10,6 +10,7 @@ import { BidCompareView } from "@/components/bid-compare-view"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
 import { RfpRecordClientToggle } from "@/components/rfp-record-client-toggle"
 import { useFetch } from "@/hooks/useFetch"
+import { isBidSummaryPending, requestBidSummary, useBidSummaryStatus, warmUpBidSummaries } from "@/lib/bid-summary-queue"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import {
@@ -48,41 +49,11 @@ import {
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
 // ── AI summary strip ─────────────────────────────────────────────────────────
-
-/** Generates (or regenerates) the AI summary for one bid, then patches the shared SWR
- *  cache directly (no revalidate round-trip) so every card/sheet showing this response
- *  picks up the fresh columns immediately instead of flashing back to "Generate". */
-async function requestSummaryGeneration(
-  responseId: string
-): Promise<{ ok: true } | { ok: false; error: string; status: number; data: unknown }> {
-  try {
-    const res = await fetch(`/api/agency/bids/${responseId}/generate-summary`, { method: "POST" })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable", status: res.status, data }
-    void mutate(
-      RFP_RESPONSES_URL,
-      (current: { responses: BidRow[] } | undefined) =>
-        current
-          ? {
-              responses: current.responses.map((r) =>
-                r.id === responseId
-                  ? {
-                      ...r,
-                      ai_summary_short: data.ai_summary_short ?? r.ai_summary_short,
-                      ai_summary_detailed: data.ai_summary_detailed ?? r.ai_summary_detailed,
-                      ai_summary_generated_at: data.ai_summary_generated_at ?? r.ai_summary_generated_at,
-                    }
-                  : r
-              ),
-            }
-          : current,
-      { revalidate: false }
-    )
-    return { ok: true }
-  } catch {
-    return { ok: false, error: "Analysis unavailable", status: 0, data: null }
-  }
-}
+//
+// Ruling S-A: summaries are generated here, by the agency, never on a vendor or guest submission.
+// lib/bid-summary-queue.ts is the one path to the generate-summary route: the page warms pending
+// summaries up in the background (at most 2 at a time) and every card, sheet and compare view
+// shares one call per bid and one generating / error state.
 
 function BidSummaryStrip({
   row, generating, error, onGenerate,
@@ -95,6 +66,7 @@ function BidSummaryStrip({
   if (generating) {
     return (
       <div className="mt-2 space-y-1.5">
+        <p className="font-mono text-2xs text-foreground-muted">Generating summary...</p>
         <Skeleton className="h-3 w-full max-w-[420px] bg-white/10" />
         <Skeleton className="h-3 w-2/3 max-w-[280px] bg-white/10" />
       </div>
@@ -148,8 +120,7 @@ function BidCard({
   rank?: number | null
   onRequestClosure: (row: BidRow, unit: RfpClosureUnit) => void
 }) {
-  const [summaryGenerating, setSummaryGenerating] = useState(false)
-  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const summaryStatus = useBidSummaryStatus(row.id)
   const { guardAction, handleUsageLimitError } = useUsageLimitModal()
 
   const badge = statusBadge(row.status)
@@ -172,16 +143,13 @@ function BidCard({
    */
   const canClose = !row.response_exists && row.status === "awaiting_response" && Boolean(row.inbox_item_id)
 
-  const generateSummary = async () => {
+  // A deliberate click: Generate / Retry (force false: the route skips a bid that already has a
+  // complete summary) or Regenerate (force true). The usage-limit modal opens only here, never
+  // for the background warm-up.
+  const generateSummary = async (force: boolean) => {
     if (!guardAction("ai_analyses")) return
-    setSummaryGenerating(true)
-    setSummaryError(null)
-    const result = await requestSummaryGeneration(row.id)
-    setSummaryGenerating(false)
-    if (!result.ok) {
-      if (handleUsageLimitError(result.status, result.data)) return
-      setSummaryError("Analysis unavailable - try again")
-    }
+    const result = await requestBidSummary(row.id, { force })
+    if (!result.ok) handleUsageLimitError(result.status, result.data)
   }
 
   return (
@@ -275,9 +243,9 @@ function BidCard({
         {row.response_exists && (
           <BidSummaryStrip
             row={row}
-            generating={summaryGenerating}
-            error={summaryError}
-            onGenerate={() => void generateSummary()}
+            generating={summaryStatus.generating}
+            error={summaryStatus.error}
+            onGenerate={() => void generateSummary(false)}
           />
         )}
       </div>
@@ -316,7 +284,7 @@ function BidCard({
             <DropdownMenuContent align="end" className="bg-background border-border">
               {row.response_exists && row.ai_summary_short && (
                 <DropdownMenuItem
-                  onClick={() => void generateSummary()}
+                  onClick={() => void generateSummary(true)}
                   className="text-foreground focus:bg-white/5 focus:text-foreground"
                 >
                   Regenerate Summary
@@ -620,6 +588,26 @@ function AgencyBidsPageInner() {
   const [closureError, setClosureError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
+
+  /**
+   * RULING S-A, THE WARM-UP. A bid now arrives with its AI summary pending (a vendor or guest
+   * submission no longer generates one), so once the list has loaded this page queues every
+   * pending bid for generation in the background, at most 2 at a time (lib/bid-summary-queue.ts),
+   * and the summary is usually ready before the bid is opened. The queue skips a bid already
+   * queued, running or failed, and the route skips one that already has a summary. The key is a
+   * string so the effect runs when the pending set changes, not on every revalidation.
+   */
+  const pendingSummaryKey =
+    isLoading || !data?.responses
+      ? ""
+      : data.responses
+          .filter((r) => r.response_id && isBidSummaryPending(r))
+          .map((r) => r.response_id as string)
+          .join(",")
+  useEffect(() => {
+    if (!pendingSummaryKey) return
+    warmUpBidSummaries(pendingSummaryKey.split(","))
+  }, [pendingSummaryKey])
 
   /**
    * THE NOTIFICATION BELL'S DEEP LINK. Read the header above this component first.
