@@ -48,8 +48,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    // G1: the active organization must be a paid lead agency. 402 otherwise.
-    const refused = await agencyGateResponse(user.id, supabase)
+    // B1 latency: the gate (org_members, organizations) and the organization scope (org_members)
+    // are independent reads, so they run together instead of one after the other. Both must pass
+    // before anything else happens; the order of the checks below is unchanged.
+    const [refused, callerOrgIds] = await Promise.all([
+      // G1: the active organization must be a paid lead agency. 402 otherwise.
+      agencyGateResponse(user.id, supabase),
+      // Organization scope, read only. Nothing is written before the one function call below.
+      resolveCallerOrgIds(user.id, supabase),
+    ])
     if (refused) return refused
 
     const parsedParams = paramsSchema.safeParse(await params)
@@ -62,8 +69,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const show = parsedBody.data.show_client_to_vendors
 
-    // Organization scope, read only. Nothing is written before the one function call below.
-    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     if (callerOrgIds.length === 0) return NextResponse.json({ error: "RFP record not found" }, { status: 404 })
 
     const { data: record, error: readErr } = await supabase
@@ -91,11 +96,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Could not change this setting. Nothing was changed." }, { status: 500 })
     }
 
-    const counts = (result ?? {}) as { inbox_rows?: number; tokens?: number }
-    console.log("[api] success", { route, method: "PATCH", userId: user.id, recordId, show, ...counts })
+    const counts = (result ?? {}) as { inbox_rows?: number; tokens?: number; show_client_to_vendors?: unknown }
+    // B1: the client shows what the database committed, so the value comes from the function's
+    // own result (it returns the value it wrote), not from the request.
+    const saved = typeof counts.show_client_to_vendors === "boolean" ? counts.show_client_to_vendors : show
+    console.log("[api] success", {
+      route, method: "PATCH", userId: user.id, recordId, show: saved, inbox_rows: counts.inbox_rows, tokens: counts.tokens,
+    })
     return NextResponse.json({
       id: recordId,
-      show_client_to_vendors: show,
+      show_client_to_vendors: saved,
       inbox_rows: typeof counts.inbox_rows === "number" ? counts.inbox_rows : null,
       tokens: typeof counts.tokens === "number" ? counts.tokens : null,
     })

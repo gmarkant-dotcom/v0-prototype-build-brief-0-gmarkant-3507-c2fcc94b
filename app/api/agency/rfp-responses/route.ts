@@ -8,6 +8,7 @@ import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
 import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
 import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
 import { readInboxLineIds, readRecordLines, readTokenLinksByResponse, resolutionFor } from "@/lib/server/rfp-record"
+import { readRecordClientSummaries } from "@/lib/server/rfp-vendor-text"
 
 export const dynamic = "force-dynamic"
 
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
       inboxIdsForProject = (scopedInboxes || []).map((r) => r.id as string)
       magicResponseIdsForProject = (scopedMagicTokens || []).map((r) => r.response_id as string)
       if (inboxIdsForProject.length === 0 && magicResponseIdsForProject.length === 0) {
-        return NextResponse.json({ responses: [] }, { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } })
+        return NextResponse.json({ responses: [], rfp_records: {} }, { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } })
       }
     }
 
@@ -247,6 +248,14 @@ export async function GET(request: Request) {
       [...inboxLineIds.values(), ...[...tokenLinks.values()].map((t) => t.lineId)],
       callerOrgIds
     )
+    // B3 and OV-A: one summary per record behind this list (the client control on each RFP group
+    // and the read-only text warnings), batched over every record at once. Agency only.
+    const recordSummaries = await readRecordClientSummaries(
+      supabase,
+      RECORD_READ_SITE,
+      [...recordViews.values()].map((v) => v.recordId),
+      callerOrgIds
+    )
     const partnerIds = [...new Set((allInboxes || []).map((r) => r.vendor_org_id).filter(Boolean) as string[])]
     let profileById: Record<string, { full_name: string | null; company_name: string | null; email: string | null }> = {}
     if (partnerIds.length > 0) {
@@ -351,6 +360,8 @@ export async function GET(request: Request) {
         rfp_sent_at: inboxRow
           ? ((inboxRow as Record<string, unknown>).created_at as string | null) ?? null
           : magicToken?.created_at ?? null,
+        // The RFP record this bid belongs to, when it is linked and readable; null otherwise.
+        rfp_record_id: record.linked ? record.view?.recordId ?? null : null,
       }
     })
 
@@ -520,6 +531,7 @@ export async function GET(request: Request) {
           updated_at: i.updated_at || i.created_at,
           inbox: i,
           versions: [],
+          rfp_record_id: recordViews.get(inboxLineIds.get(i.id as string) ?? "")?.recordId ?? null,
         }
       })
 
@@ -528,7 +540,7 @@ export async function GET(request: Request) {
     )
 
     return NextResponse.json(
-      { responses: combined },
+      { responses: combined, rfp_records: Object.fromEntries(recordSummaries) },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

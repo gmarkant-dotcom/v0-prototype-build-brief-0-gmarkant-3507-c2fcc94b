@@ -18,7 +18,9 @@ import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
-import { buildVendorCopy, type VendorCopyRecord } from "@/lib/rfp-vendor-copy"
+import { buildVendorCopy, pickVendorCopy, type VendorCopyRecord } from "@/lib/rfp-vendor-copy"
+import { checkVendorText, lineVendorTextFields, sharedVendorTextFields, type VendorTextField } from "@/lib/rfp-vendor-text-check"
+import { readProjectClientNames } from "@/lib/server/rfp-vendor-text"
 import {
   broadcastRecordFieldsSchema,
   createRfpRecordDraft,
@@ -222,6 +224,28 @@ export async function POST(request: NextRequest) {
     const rows: Record<string, unknown>[] = []
     // Step A: one RFP record line per scope item, in the order the agency arranged them.
     const recordLines: RfpRecordLineInput[] = []
+    // OV-A: each line's own vendor-visible text, for the warnings returned to the agency below.
+    const lineTextFields: VendorTextField[] = []
+    /**
+     * OV-A: WARN, NEVER BLOCK. The vendor-visible text checked after the send, returned in THIS
+     * response only (the agency's own browser), never as a refusal and never on any vendor or guest
+     * surface. A failure here returns no warnings and never fails the broadcast.
+     */
+    const sendWarnings = async () => {
+      try {
+        const names = verifiedProject
+          ? (await readProjectClientNames(supabase, "POST /api/agency/broadcast-rfp", [verifiedProject.id], callerOrgIds)).get(verifiedProject.id) ?? []
+          : []
+        return checkVendorText({
+          clientHidden: !showClientToVendors,
+          clientNames: [clientNameSnapshot, ...names],
+          fields: [...sharedVendorTextFields(pickVendorCopy(masterRfp)), ...lineTextFields],
+        })
+      } catch (err) {
+        console.error("[broadcast-rfp] vendor text check failed; no warnings returned", { name: err instanceof Error ? err.name : "unknown" })
+        return []
+      }
+    }
 
     // PHASE 2: broadcasting cues an invitation to partner. Collected here and acted on once,
     // after the inbox rows are safely in - a cue must never be the reason a broadcast fails,
@@ -271,6 +295,15 @@ export async function POST(request: NextRequest) {
         releasedBudget,
         sortOrder: recordLines.length,
       })
+      lineTextFields.push(
+        ...lineVendorTextFields({
+          key: scopeItemId,
+          name: scopeItemName,
+          description: scopeItemDescription,
+          timeline,
+          budgetReleased: releasedBudget !== null,
+        })
+      )
       const vendorCopy = buildVendorCopy(vendorCopyRecord, { releasedBudget })
 
       for (const partnerId of item.partnerIds || []) {
@@ -731,7 +764,7 @@ export async function POST(request: NextRequest) {
     const resend = resendApiKey ? new Resend(resendApiKey) : null
     if (!resend) {
       console.error("[broadcast-rfp] RESEND_API_KEY not configured; broadcast rows created without notifications")
-      return NextResponse.json({ ok: true, count: rows.length, emailsQueued: 0, emailConfigMissing: true })
+      return NextResponse.json({ ok: true, count: rows.length, emailsQueued: 0, emailConfigMissing: true, warnings: await sendWarnings() })
     }
 
     // Batch existing partner notifications - one email per recipient listing all scope items
@@ -825,6 +858,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       count: rows.length,
       emailsQueued: existingPartnerNotifications.length + manualRecipientNotifications.length,
+      warnings: await sendWarnings(),
     })
   } catch (e) {
     console.error("broadcast-rfp:", e)
