@@ -1,5 +1,10 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-15 (owner; recorded on feat/rfp-client-ux). MIGRATIONS 071-120 ARE APPLIED AND
+> VERIFIED. NEXT FREE MIGRATION NUMBER: 121.** Read the dated section "2026-10-15 ... leak #8 closed at
+> the field level" at the end of this file: 120 and the Lightning budget data fix applied, owner rulings
+> on F2-F8, ruling OV-A, browser findings B1-B3.
+
 > **UPDATED 2026-10-15 (feat/rfp-record-c). 120 IS AUTHORED, NOT APPLIED; its pre-apply test has not
 > been run.** Step C code and `120_rfp_vendor_copy_scrub.sql` (the vendor copy scrub and its guard; down
 > file; pre-apply test, 29 assertions, none INCONCLUSIVE by design; COMMIT at line 540) are on
@@ -204,3 +209,55 @@ feat/budget-spine-server` = `020432a`, no conflicts), report `docs/budget-spine-
 
 Every cross-agency assertion in every pre-apply test remains **NO SUBJECT = INCONCLUSIVE**, never
 PASS: m a r k a n t is the only lead organization with members.
+
+## 2026-10-15 (owner; recorded on feat/rfp-client-ux): 120 applied, leak #8 closed at the field level
+
+This section supersedes every "120 ... NOT applied" and "next free 120" line above.
+
+**Migrations 071-120 are applied and verified. Next free migration number: 121.**
+
+- **Step C merged** at `bb91c4c` (`feat/rfp-record-c`, 7 commits).
+- **120 applied** (`120_rfp_vendor_copy_scrub.sql`, the vendor copy scrub and guards): pre-apply test
+  29/29 PASS, none INCONCLUSIVE; dry run and rollback proven. Post-apply: 4 functions (SECURITY INVOKER,
+  search_path pinned), 2 guard triggers enabled, 98 inbox rows and 21 tokens, 0 keys outside the
+  allow-lists, `projectName` kept on 98 rows, 161 public policies unchanged.
+- **Data fix applied:** `supabase/data-fixes/2026-10-15-lightning-released-budget_apply.sql`. Six Lightning
+  inbox rows were given their line's released budget (their budget lived only in `totalBudget`, which 120
+  removed). Inventory C7 is now 0.
+- **Live leak #8 is closed at the field level:** no client, rubric, other lines or unreleased budget in any
+  vendor copy field. **The remaining exposure is free text** the agency writes (finding B2 below),
+  handled by ruling OV-A.
+
+**Owner rulings on the step C findings (`docs/rfp-record-c-report.md` section 8):**
+- **F2** (the vendor's own invite token in `scope_item_id`) and **F3** (`magicToken` in old
+  notifications): accepted, low risk. No change.
+- **F4:** D3 ("client hidden by default") covers pre-award only. An awarded vendor may see the client.
+- **F5:** real (see B2). Handled by OV-A.
+- **F6:** the AI summary cost on the agency's quota is accepted.
+- **F7** (Lightning resend wipes token criteria and materials) and **F8** (guest new bid drops
+  `proposal_sections`): **parked. Do not touch.**
+
+**Browser findings 2026-10-15 (owner, production):**
+- **B1. Toggle off is dropped.** On `/agency/bids`, ticking "Show client name to vendors" for record
+  `21f9d17d` sent one PATCH to `/api/agency/rfp-records/21f9d17d-...` (200, about 3.9 s); the database
+  shows `show_client_to_vendors` true with the inbox row and token released. Unticking afterwards sent no
+  request; after a reload the box is ticked again. Turning it off worked on 2026-10-14, so this is a
+  client-side state or timing defect. Record `21f9d17d` is left as it is (owner's own test vendor).
+- **B2. F5 is real.** Vendor-visible free text names the client and money even with the client hidden:
+  the overview of record `21f9d17d` names the client; the overview of inbox row `719f19ea` names a brand
+  that is not the project's recorded client, the total programme investment and the fee percentage. The
+  allow-listed fields are correct; the agency's own text defeats the hiding.
+- **B3. UX.** The separate "Client name on sent RFPs" panel at the top of `/agency/bids` is the wrong
+  place; the control belongs on each RFP where the agency already looks at it.
+
+**Owner ruling OV-A (2026-10-15): warn at send, never block.** Before an RFP is sent, check the
+vendor-visible text and show an inline warning naming each match, with an AI-suggested vendor-safe rewrite
+the agency can accept, edit or ignore. Sending proceeds either way. Flagged:
+- the client's identity, only while the client is hidden: the project's client name, the client profile's
+  name and any stored aliases or variants (case-insensitive, word boundary, with and without punctuation);
+- money and percentages (currency amounts, numbers with k/m/M suffixes, percentages): always in text shared
+  by every vendor (overview, objectives, project name, timeline text); in a line's own vendor-visible
+  description only when that line's budget is not released.
+
+**Next:** `feat/rfp-client-ux` (B1 fix, B3 move, OV-A at send and on sent RFPs; no migration). Then the
+actuals feeder, migration 121 or later.
