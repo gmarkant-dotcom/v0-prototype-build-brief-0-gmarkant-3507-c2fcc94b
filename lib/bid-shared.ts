@@ -60,6 +60,19 @@ export type BidRow = {
   composite_score?: number | null
   evaluation_status?: string | null
   ranked_recommendation?: string | null
+  /** The agency's RFP record this row was sent from (migration 118); null when unlinked or unreadable. */
+  rfp_record_id?: string | null
+}
+
+/** One sent RFP as GET /api/agency/rfp-responses summarises it (lib/server/rfp-vendor-text.ts). Agency only. */
+export type RfpRecordSummary = {
+  id: string
+  source: "wizard" | "magic_link" | "backfill"
+  show_client_to_vendors: boolean
+  client_name: string | null
+  project_name: string | null
+  broadcast_at: string | null
+  text_warnings: { names_client: boolean; shows_figures: boolean }
 }
 
 // ── Terms disclosure display ────────────────────────────────────────────────
@@ -241,6 +254,32 @@ export function buildRankedBlocks(rows: BidRow[]): RankedBlock[] {
   })
 
   return positioned.sort((a, b) => a.firstIndex - b.firstIndex).map((p) => p.block)
+}
+
+export type RecordSegment = { key: string; recordIds: string[]; blocks: RankedBlock[] }
+
+/**
+ * B3: the blocks of one list section, gathered under the RFP record(s) they were sent from, in order of
+ * first appearance, so each RFP gets one header with its client control. Ranking is untouched: a
+ * ranked block stays whole, and when its rows come from several records (Lightning sends one record per
+ * vendor) the segment carries all of them. Rows with no record form a segment with key "" (no header).
+ */
+export function segmentBlocksByRecord(blocks: RankedBlock[]): RecordSegment[] {
+  const order: string[] = []
+  const byKey = new Map<string, RecordSegment>()
+  for (const block of blocks) {
+    const rows = block.type === "single" ? [block.row] : block.rows
+    const recordIds = [...new Set(rows.map((r) => r.rfp_record_id).filter((id): id is string => Boolean(id)))].sort()
+    const key = recordIds.join(",")
+    let segment = byKey.get(key)
+    if (!segment) {
+      segment = { key, recordIds, blocks: [] }
+      byKey.set(key, segment)
+      order.push(key)
+    }
+    segment.blocks.push(block)
+  }
+  return order.map((key) => byKey.get(key) as RecordSegment)
 }
 
 /** Within a ranked block: scored+complete bids sorted desc by composite_score first

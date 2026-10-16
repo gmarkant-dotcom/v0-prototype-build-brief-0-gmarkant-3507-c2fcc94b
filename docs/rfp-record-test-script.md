@@ -339,3 +339,52 @@ budget range `$40,000 - $60,000`). Accounts: agency **gmarkant@gmail.com**, vend
 - **RL1** `120_rfp_vendor_copy_scrub_down.sql` drops the two triggers and four functions only. 120's V2 and
   V3 return no rows; 161 policies. The scrubbed copies stay scrubbed (the down file cannot restore them;
   the records hold the truth). The step C code keeps writing allow-listed copies.
+
+## Part M. Client UX: the client control on each RFP, OV-A warnings (`feat/rfp-client-ux`, no migration)
+
+Agency browser: **gmarkant@gmail.com**. Vendor browser (a separate profile): **gmarkant@icloud.com**.
+Keep DevTools Network open, "Preserve log" on, filter `rfp-records`. Record `21f9d17d` is the owner's test
+record: it may be toggled, but leave it as found at the end (currently client visible).
+
+- **RM1 Panel gone.** `/agency/bids`: there is no "Client name on sent RFPs" panel above the search box.
+- **RM2 Control on each RFP.** Open a client group. Each RFP sent with a record shows a header line (type,
+  project name, "Sent <date>") with a pill "Client hidden" or "Client visible". Hover it: the tooltip reads
+  "Client: <name>". RFPs sent before records (unlinked, e.g. inbox `04391718`) show no header and no pill.
+- **RM3 Toggle on.** On an RFP showing "Client hidden", click the pill once. Expected: one PATCH
+  `/api/agency/rfp-records/<id>` with body `{"show_client_to_vendors":true}`, 200; the pill reads "Saving..."
+  while it runs, then "Client visible".
+- **RM4 Toggle off.** Click it again. Expected: a second PATCH with `false`, 200; the pill reads "Client
+  hidden". (B1: on 2026-10-15 this second click sent no request.)
+- **RM5 Reload persists.** Reload the page: the pill shows the last saved state.
+- **RM6 Rapid double click.** Click the pill twice quickly. Expected: the first PATCH runs; the second
+  click is not lost: after the first answers, a second PATCH is sent with the opposite value, and the pill
+  ends in the state of the LAST click (here: back where it started). Then three quick clicks: ends flipped.
+  Reload: same state.
+- **RM7 Keyboard.** Tab to the pill; Space and Enter each toggle it (one PATCH each). A screen reader
+  announces "Show client name to vendors, switch, on/off".
+- **RM8 Error and revert.** DevTools, Network, Offline; click the pill. Expected: an amber message "Could
+  not save this change. Showing the saved setting." and the pill shows the saved state. Back online.
+- **RM9 Sent-RFP warnings (read-only).** Record `21f9d17d` (overview names the client): while its pill is
+  "Client hidden", the header shows "Brief text names the client"; with "Client visible" that chip is gone.
+  An RFP whose overview holds a programme total or a fee percentage (the record behind inbox `719f19ea`)
+  shows "Brief text shows figures" in either state. No button rewrites sent text.
+- **RM10 Wizard send step.** `/agency` (RFP wizard), step 6. The client control is the same pill as RM2
+  (hover shows the client). In step 2, put the client's name and "$250k" and "12% fee" in the overview;
+  back to step 6. Within half a second an amber box above "Broadcast RFPs" lists each passage with its field
+  and reason. Toggle the pill to "Client visible": the client-name entries disappear, the figures stay. Put
+  "$50k" in a scope item's description: flagged while "Release budget" is off for that line, gone when on.
+- **RM11 Rewrite.** Pill back to "Client hidden"; click "Suggest vendor-safe rewrite". One POST
+  `/api/agency/rfp-text/rewrite`, 200. Each suggestion shows removed words struck through and added words in
+  green as plain text; edit the box, then "Use this text": the overview changes and its warning goes. "Keep
+  mine" leaves the text. Broadcast with a warning still showing: the send succeeds (never blocked). The
+  broadcast response (Network, `broadcast-rfp`) carries `warnings`.
+- **RM12 Lightning.** `/agency/magic-rfp`: the pill appears in step 1; step 2 shows the same warning box
+  above "Send Lightning RFPs" for the brief (figures only while "Release budget" is off). The project name
+  is warned about but not offered for rewrite. Send succeeds either way; the `magic-link` response carries
+  `warnings`.
+- **RM13 Vendor sees the client only while on.** As gmarkant@icloud.com, open the RFP from RM3 in
+  `/partner/rfps` (or its guest link): the client name appears only while the agency's pill reads "Client
+  visible"; flip it to hidden and reload: it is gone. The vendor's page and the guest page never show any
+  warning, and their network responses contain no `warnings` or `rfp_records` key.
+- **RM14 Gate.** As the vendor, `fetch('/api/agency/rfp-text/rewrite', {method:'POST', body:'{}'})` in the
+  console: 402 (or 401 signed out). Never 200.

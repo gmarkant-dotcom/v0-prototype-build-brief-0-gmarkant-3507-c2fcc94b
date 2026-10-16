@@ -49,12 +49,16 @@ import {
   RELEASE_BUDGET_HINT,
   RELEASE_BUDGET_LABEL,
   SHOW_CLIENT_TO_VENDORS_HINT,
-  SHOW_CLIENT_TO_VENDORS_LABEL,
 } from "@/lib/rfp-record-copy"
 import { MAX_RFP_EVALUATION_CRITERIA, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { type BudgetCategory } from "@/lib/budget-categories"
+import { ClientVisibilitySwitch } from "@/components/rfp-client-visibility-control"
+import { VendorTextWarnings } from "@/components/vendor-text-warnings"
+import { lineVendorTextFields, sharedVendorTextFields } from "@/lib/rfp-vendor-text-check"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/** OV-A field ids for the one line a Lightning send has (its name and its brief). */
+const LIGHTNING_LINE_KEY = "lightning"
 
 type BriefData = {
   projectName: string
@@ -581,6 +585,12 @@ function MagicRfpContent() {
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  /** OV-A: an accepted vendor-safe rewrite goes back into the brief field it came from. */
+  const applyVendorText = (field: string, text: string) => {
+    if (field === `line.${LIGHTNING_LINE_KEY}.name`) setBrief((prev) => ({ ...prev, projectName: text }))
+    else if (field === `line.${LIGHTNING_LINE_KEY}.description`) setBrief((prev) => ({ ...prev, scopeDescription: text }))
+  }
+
   const sendLightningRfps = async () => {
     setSending(true)
     // Same conversion app/agency/page.tsx's standard wizard already applies - end of the
@@ -1047,14 +1057,12 @@ function MagicRfpContent() {
 
                 <div className="p-4 rounded-lg border border-border bg-white/5 space-y-3">
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={showClientToVendors}
-                        onCheckedChange={(v) => setShowClientToVendors(v === true)}
-                        className="border-border"
-                      />
-                      <span className="font-mono text-xs text-foreground">{SHOW_CLIENT_TO_VENDORS_LABEL}</span>
-                    </label>
+                    {/* B3: the same control as each RFP on /agency/bids; here it is a choice sent with the RFP. */}
+                    <ClientVisibilitySwitch
+                      visible={showClientToVendors}
+                      onToggle={() => setShowClientToVendors((v) => !v)}
+                      clientName={brief.clientName || clientSelection.clientName || selectedProject?.client || null}
+                    />
                     <p className="font-mono text-2xs text-foreground-muted">{SHOW_CLIENT_TO_VENDORS_HINT}</p>
                   </div>
                   <div className="space-y-2">
@@ -1225,6 +1233,28 @@ function MagicRfpContent() {
                 Add recipient
               </Button>
             </GlassCard>
+
+            {/* OV-A: warn at send, never block. A Lightning brief is its one line's own text, so
+                figures in it are flagged only while "Release budget" is off. The project name is
+                warned about but edited on the project, so it is not offered for a rewrite here. */}
+            <VendorTextWarnings
+              projectId={selectedProject?.id ?? null}
+              onApply={applyVendorText}
+              canApply={(field) => field.startsWith("line.")}
+              input={{
+                clientHidden: !showClientToVendors,
+                clientNames: [brief.clientName, clientSelection.clientName, selectedProject?.client],
+                fields: [
+                  ...sharedVendorTextFields({ projectName: selectedProject?.name ?? "" }),
+                  ...lineVendorTextFields({
+                    key: LIGHTNING_LINE_KEY,
+                    name: brief.projectName,
+                    description: brief.scopeDescription,
+                    budgetReleased: releaseBudget,
+                  }),
+                ],
+              }}
+            />
 
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)} className="border-border text-foreground hover:bg-white/5">

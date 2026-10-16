@@ -8,13 +8,14 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { BidCompareView } from "@/components/bid-compare-view"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
-import { RfpRecordClientToggle } from "@/components/rfp-record-client-toggle"
+import { RfpRecordClientVisibility } from "@/components/rfp-client-visibility-control"
 import { useFetch } from "@/hooks/useFetch"
 import { isBidSummaryPending, requestBidSummary, useBidSummaryStatus, warmUpBidSummaries } from "@/lib/bid-summary-queue"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
-import { cn, formatSubmittedAt } from "@/lib/utils"
+import { cn, formatDateTime, formatSubmittedAt } from "@/lib/utils"
 import {
   type BidRow,
+  type RfpRecordSummary,
   BID_STATUSES,
   type BidStatusKey,
   statusBadge,
@@ -22,6 +23,7 @@ import {
   bestBudgetDisplay,
   scopeKeyForRow,
   buildRankedBlocks,
+  segmentBlocksByRecord,
   sortRankedGroup,
   requestRanking,
   termsSummaryLine,
@@ -47,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
+const EMPTY_RECORDS: Record<string, RfpRecordSummary> = {}
 
 // ── AI summary strip ─────────────────────────────────────────────────────────
 //
@@ -418,10 +421,79 @@ function RankedGroup({
   )
 }
 
+// ── RFP header (B3) ───────────────────────────────────────────────────────────
+//
+// The client control lives on each RFP the agency is already looking at, not in a separate panel.
+// One line per record behind the RFP group: what was sent and when, the control (the client name on
+// hover), and, read-only, whether the brief text as sent names the client (only while it is hidden)
+// or shows figures (ruling OV-A). Sent copies are never rewritten from here (D5). A group whose rows
+// have no record (sent before records, unlinked) shows nothing.
+
+const SOURCE_LABEL: Record<RfpRecordSummary["source"], string> = {
+  wizard: "RFP",
+  magic_link: "Lightning RFP",
+  backfill: "RFP",
+}
+
+function RfpRecordHeader({
+  recordIds, records, rows, onRecordSaved,
+}: {
+  recordIds: string[]
+  records: Record<string, RfpRecordSummary>
+  rows: BidRow[]
+  onRecordSaved: (recordId: string, visible: boolean) => void
+}) {
+  const known = recordIds.map((id) => records[id]).filter((r): r is RfpRecordSummary => Boolean(r))
+  if (known.length === 0) return null
+  return (
+    <div className="space-y-1.5 px-1 pt-1">
+      {known.map((record) => {
+        const vendors =
+          known.length > 1
+            ? [...new Set(rows.filter((r) => r.rfp_record_id === record.id).map((r) => r.partner_display_name))].join(", ")
+            : null
+        const namesClient = !record.show_client_to_vendors && record.text_warnings.names_client
+        return (
+          <div key={record.id} className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0 flex items-center gap-2 flex-wrap font-mono text-2xs text-foreground-muted">
+              <span className="uppercase tracking-wider">{SOURCE_LABEL[record.source]}</span>
+              {record.project_name && <span className="text-foreground truncate">{record.project_name}</span>}
+              {record.broadcast_at && <span>Sent {formatDateTime(record.broadcast_at)}</span>}
+              {vendors && <span>· {vendors}</span>}
+              {namesClient && (
+                <span
+                  className="px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                  title="The brief text vendors received names the client, although the client is hidden. Sent text is not changed."
+                >
+                  Brief text names the client
+                </span>
+              )}
+              {record.text_warnings.shows_figures && (
+                <span
+                  className="px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                  title="The brief text vendors received shows money figures or percentages. Sent text is not changed."
+                >
+                  Brief text shows figures
+                </span>
+              )}
+            </div>
+            <RfpRecordClientVisibility
+              recordId={record.id}
+              savedVisible={record.show_client_to_vendors}
+              clientName={record.client_name}
+              onSaved={onRecordSaved}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Group section ─────────────────────────────────────────────────────────────
 
 function GroupSection({
-  label, rows, defaultOpen, groupBy, onView, selectedIds, onToggleSelect, onRequestClosure,
+  label, rows, defaultOpen, groupBy, onView, selectedIds, onToggleSelect, onRequestClosure, records, onRecordSaved,
 }: {
   label: string
   rows: BidRow[]
@@ -431,6 +503,8 @@ function GroupSection({
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onRequestClosure: (row: BidRow, unit: RfpClosureUnit) => void
+  records: Record<string, RfpRecordSummary>
+  onRecordSaved: (recordId: string, visible: boolean) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [activeStatus, setActiveStatus] = useState<BidStatusKey>("all")
@@ -505,29 +579,41 @@ function GroupSection({
             {filtered.length === 0 ? (
               <p className="text-sm text-foreground-muted py-4 text-center">No bids match this filter.</p>
             ) : (
-              buildRankedBlocks(filtered).map((block) =>
-                block.type === "single" ? (
-                  <BidCard
-                    key={block.row.id}
-                    row={block.row}
-                    groupBy={groupBy}
-                    onView={onView}
-                    selected={selectedIds.has(block.row.id)}
-                    onToggleSelect={onToggleSelect}
-                    onRequestClosure={onRequestClosure}
-                  />
-                ) : (
-                  <RankedGroup
-                    key={block.scopeKey}
-                    rows={block.rows}
-                    groupBy={groupBy}
-                    onView={onView}
-                    selectedIds={selectedIds}
-                    onToggleSelect={onToggleSelect}
-                    onRequestClosure={onRequestClosure}
-                  />
-                )
-              )
+              segmentBlocksByRecord(buildRankedBlocks(filtered)).map((segment) => (
+                <div key={segment.key || "unlinked"} className="space-y-2">
+                  {segment.recordIds.length > 0 && (
+                    <RfpRecordHeader
+                      recordIds={segment.recordIds}
+                      records={records}
+                      rows={segment.blocks.flatMap((b) => (b.type === "single" ? [b.row] : b.rows))}
+                      onRecordSaved={onRecordSaved}
+                    />
+                  )}
+                  {segment.blocks.map((block) =>
+                    block.type === "single" ? (
+                      <BidCard
+                        key={block.row.id}
+                        row={block.row}
+                        groupBy={groupBy}
+                        onView={onView}
+                        selected={selectedIds.has(block.row.id)}
+                        onToggleSelect={onToggleSelect}
+                        onRequestClosure={onRequestClosure}
+                      />
+                    ) : (
+                      <RankedGroup
+                        key={block.scopeKey}
+                        rows={block.rows}
+                        groupBy={groupBy}
+                        onView={onView}
+                        selectedIds={selectedIds}
+                        onToggleSelect={onToggleSelect}
+                        onRequestClosure={onRequestClosure}
+                      />
+                    )
+                  )}
+                </div>
+              ))
             )}
           </div>
         </div>
@@ -587,7 +673,26 @@ function AgencyBidsPageInner() {
   const [closureSubmitting, setClosureSubmitting] = useState(false)
   const [closureError, setClosureError] = useState<string | null>(null)
 
-  const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
+  const { data, isLoading, error } = useFetch<{ responses: BidRow[]; rfp_records?: Record<string, RfpRecordSummary> }>(
+    RFP_RESPONSES_URL
+  )
+  const records = data?.rfp_records ?? EMPTY_RECORDS
+
+  /**
+   * B1: a saved client toggle updates the list's copy of that record with the SERVER's answer (the
+   * PATCH response), in place, with no re-read. The header's warning chip follows it.
+   */
+  const onRecordSaved = useCallback((recordId: string, visible: boolean) => {
+    void mutate(
+      RFP_RESPONSES_URL,
+      (current: { responses: BidRow[]; rfp_records?: Record<string, RfpRecordSummary> } | undefined) => {
+        const record = current?.rfp_records?.[recordId]
+        if (!current || !record) return current
+        return { ...current, rfp_records: { ...current.rfp_records, [recordId]: { ...record, show_client_to_vendors: visible } } }
+      },
+      { revalidate: false }
+    )
+  }, [])
 
   /**
    * RULING S-A, THE WARM-UP. A bid now arrives with its AI summary pending (a vendor or guest
@@ -820,9 +925,6 @@ function AgencyBidsPageInner() {
           </button>
         </div>
 
-        {/* Step B: the client toggle on RFPs already sent. Renders nothing before 118 or with no records. */}
-        <RfpRecordClientToggle />
-
         {/* Search + group-by toggle */}
         <div className="flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[240px] max-w-lg">
@@ -888,6 +990,8 @@ function AgencyBidsPageInner() {
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 onRequestClosure={requestClosure}
+                records={records}
+                onRecordSaved={onRecordSaved}
               />
             ))}
           </div>

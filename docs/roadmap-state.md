@@ -1,5 +1,23 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-15 (owner; recorded on feat/rfp-client-ux). THIS BANNER SUPERSEDES THE ONES BELOW.**
+> **Migrations 071-120 are applied and verified. Next free number: 121.** Step C merged at `bb91c4c`;
+> 120 pre-apply 29/29 PASS, dry run and rollback proven, applied (4 functions invoker and pinned, 2 guard
+> triggers, 98 inbox rows and 21 tokens, 0 keys outside the allow-lists, `projectName` on 98 rows, 161
+> policies unchanged). The Lightning released-budget data fix is applied (six rows; C7 now 0). **Leak #8
+> is closed at the field level; free text is the remaining exposure, handled by ruling OV-A.**
+> Owner rulings: F2, F3 accepted (low risk); F4 D3 covers pre-award only; F5 real (B2); F6 accepted;
+> **F7 and F8 parked, do not touch.** Ruling **OV-A**: warn at send, never block (client identity while
+> hidden; money and percentages always in shared text, in a line's own description only when its budget
+> is not released; AI rewrite the agency may accept, edit or ignore). Browser findings: **B1** toggle off
+> sends no request; **B2** free text names the client and money; **B3** the client control belongs on each
+> RFP, not in a top panel. Full text: `docs/state-of-record-2026-10-12.md`, section dated 2026-10-15.
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **`feat/rfp-client-ux`** (no migration): B1 toggle fix, B3 control on each RFP group, OV-A warnings
+>    at send and on sent RFPs. Report `docs/rfp-client-ux-report.md`.
+> 2. **The actuals feeder**, migration 121 or later.
+
 > **UPDATED 2026-10-15 (feat/rfp-record-c). THIS BANNER SUPERSEDES THE ONES BELOW.** Step C code and
 > **120** (the vendor copy scrub and its guard) are authored on `feat/rfp-record-c`; **120 is NOT
 > applied**. Next free number: **120** until it is applied, then **121**. Report:

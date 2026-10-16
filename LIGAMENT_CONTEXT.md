@@ -191,6 +191,22 @@ build it through `buildVendorCopy()` / `pickVendorCopy()`: after 120 the databas
 (23514).** **Next free migration number: 120 until it is applied, then 121.** Report:
 `docs/rfp-record-c-report.md`.
 
+**2026-10-15 (owner; recorded on feat/rfp-client-ux): 120 APPLIED AND VERIFIED. MIGRATIONS 071-120
+APPLIED. NEXT FREE MIGRATION NUMBER: 121.** Step C merged at `bb91c4c`. 120: pre-apply 29/29 PASS, none
+inconclusive; dry run and rollback proven. Post-apply: 4 functions (invoker, pinned), 2 guard triggers
+enabled, 98 inbox rows and 21 tokens, 0 keys outside the allow-lists, `projectName` kept on 98 rows, 161
+policies unchanged. Data fix `supabase/data-fixes/2026-10-15-lightning-released-budget_apply.sql` applied
+(six Lightning rows given their line's released budget; C7 now 0). **Leak #8 is closed at the field
+level; free text the agency writes is the remaining exposure, handled by ruling OV-A.** Owner rulings on
+step C findings: F2, F3 accepted (low risk); F4: D3 covers pre-award only, awarded vendors may see the
+client; F5 real (B2); F6 accepted; **F7 and F8 parked, do not touch.** **Ruling OV-A: warn at send,
+never block** - flag the client's identity (project client name, client profile name, aliases) only
+while the client is hidden, and money or percentages always in shared text (overview, objectives, project
+name, timeline) and in a line's own description only when its budget is not released; offer an AI
+vendor-safe rewrite the agency may accept, edit or ignore. Browser findings B1 (toggle off sent no
+request), B2 (free text names client and money), B3 (client control belongs on each RFP). Full text:
+`docs/state-of-record-2026-10-12.md`, section dated 2026-10-15.
+
 **Budget fee/cost owner rulings (2026-10-14):**
 - **R-K1** A line may carry its own kind (`budget_lines.fee_or_cost`), overriding its category; NULL
   inherits. Every total, margin and export goes by the effective kind.
@@ -267,7 +283,7 @@ older notes are quoted as prior evidence only, not as current status).
 | 116 | **applied and catalog-verified 2026-10-14** (pre-apply test 40/40 PASS) | Budget line math: `budget_lines.quantity`, `unit_rate`, `multiplier`, `unit_label` (4 nullable columns); trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW sets estimate = round(qty x rate x multiplier, 2) when a rate is set; SECURITY INVOKER, search_path pinned, anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
 | 117 | **applied and catalog-verified 2026-10-14** (pre-apply test 29/29 PASS; the owner's first run failed with 42725, and the repository copy of the test now carries the F4 `tgenabled::text` cast) | Budget line kind (R-K1): nullable `budget_lines.fee_or_cost` text, CHECK NULL or 'fee' or 'cost'. NULL inherits the category's kind; effective kind = coalesce(line, category). No backfill, no policy or grant change. Down file drops the column and every override with it. Catalog after apply: text nullable column; CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
 | 118 | **applied and catalog-verified 2026-10-14** (pre-apply test 96 PASS, 0 FAIL, 1 INCONCLUSIVE by design: C3; 161 public policies; F1 closed in production) | Agency-owned RFP record: `rfp_records`, `rfp_record_lines` (RLS through the new `current_user_entitled_lead_org_ids()`, paid lead agency only, no DELETE, no vendor policy); D5 snapshot guard and line guard (LG118); five nullable link columns (`partner_rfp_inbox.rfp_line_id`, `client_name_released`; `rfp_magic_tokens.rfp_line_id`, `attached_inbox_id`, `client_name_released`) with a link-column guard (42501 / 23514). Down file refuses while records or links exist unless `ligament.allow_drop_rfp_records = 'on'`. |
-| 120 | **authored 2026-10-15 on `feat/rfp-record-c`, NOT applied** (pre-apply test 29 assertions, not run; none INCONCLUSIVE by design) | Vendor copy scrub: `rfp_vendor_copy_keys()` and `rfp_token_reference_materials_keys()` (the allow-lists, one copy each, equal to `lib/rfp-vendor-copy.ts`); LG120 pre-flight (no removed value a linked row's record does not hold, no lost token join, only unlinked row `04391718` may lose a value); scrub of the two JSON columns only (removes `_magic_token`); BEFORE INSERT OR UPDATE guards on `partner_rfp_inbox` and `rfp_magic_tokens` for every role (23514). No policy or grant change. Idempotent. Down file drops the guard only; the scrub cannot be restored from it. Deploy step C code first. |
+| 120 | **applied and verified 2026-10-15** (pre-apply test 29/29 PASS, none INCONCLUSIVE; dry run and rollback proven; 0 keys outside the allow-lists; 161 policies unchanged) | Vendor copy scrub: `rfp_vendor_copy_keys()` and `rfp_token_reference_materials_keys()` (the allow-lists, one copy each, equal to `lib/rfp-vendor-copy.ts`); LG120 pre-flight (no removed value a linked row's record does not hold, no lost token join, only unlinked row `04391718` may lose a value); scrub of the two JSON columns only (removes `_magic_token`); BEFORE INSERT OR UPDATE guards on `partner_rfp_inbox` and `rfp_magic_tokens` for every role (23514). No policy or grant change. Idempotent. Down file drops the guard only; the scrub cannot be restored from it. Deploy step C code first. |
 | 119 | **applied and verified 2026-10-14** (pre-apply test 33/33 PASS; 44 records, 112 lines, inbox 97/98 linked, tokens 21/21; one row refused: inbox `04391718`, its token row no longer exists) | RFP record backfill and client toggle: `rfp_record_set_client_visibility(uuid, boolean)` (SECURITY INVOKER, pinned, anon revoked; sets the record's toggle and `client_name_released` on every linked inbox row and token in one transaction, P0002 and nothing written when the caller cannot update the record). Backfill: one record per wizard send and per Lightning token (D4, D6), source `backfill`, D2 released = estimated, D3 client hidden, 118 write order, provenance rule (copies must agree or the group is refused; a single copy is built and marked `unverified single copy`; client name from the project). Refuses a second run (LG119). Down file unlinks and deletes backfilled records only. |
 
 **Nulled legacy columns (106, 108, 110, 112) are deliberately empty.** Do not repopulate them and
@@ -277,7 +293,7 @@ INCONCLUSIVE rows were the NO SUBJECT cross-agency checks (A6, B1, B2), accepted
 precedent because m a r k a n t is the only lead organization with members.
 
 
-> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 120** (2026-10-15; 118 and 119 are applied and verified; 120 is authored on `feat/rfp-record-c`, not applied, so the next to author is 121). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`); the actuals feeder is 121 or later.
+> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 121** (2026-10-15; 118, 119 and 120 are applied and verified). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`); the actuals feeder is 121 or later.
 > Older notes that reserve 078 for M1 are superseded - see `docs/schema-truth.md` section 2.
 >
 > **THE PER-ACCOUNT ROLE BACKFILL IS RETIRED. 2026-08-20. It has no members.**

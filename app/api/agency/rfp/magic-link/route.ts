@@ -13,6 +13,8 @@ import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { exactEmailIlike } from "@/lib/server/account-existence"
 import { vendorTokenReferenceMaterials } from "@/lib/rfp-vendor-copy"
+import { checkVendorText, lineVendorTextFields, sharedVendorTextFields, type VendorTextMatch } from "@/lib/rfp-vendor-text-check"
+import { readProjectClientNames } from "@/lib/server/rfp-vendor-text"
 import {
   createRfpRecordDraft,
   logColumnMissingOnce,
@@ -661,9 +663,32 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent, attached })
+    // OV-A: WARN, NEVER BLOCK. The vendor-visible text of this send, checked after it went out and
+    // returned in this AGENCY response only, never as a refusal; the guest link and the vendor portal
+    // never receive it. A Lightning send's whole brief is its one line's description, so figures there
+    // are flagged only when the line's budget is not released. A failure returns no warnings.
+    let warnings: VendorTextMatch[] = []
+    try {
+      const names = (await readProjectClientNames(auth.supabase, RECORD_SITE, [projectId], callerOrgIds)).get(projectId) ?? []
+      warnings = checkVendorText({
+        clientHidden: !showClientToVendors,
+        clientNames: [project.client_name as string | null, ...names],
+        fields: [
+          ...sharedVendorTextFields({ projectName: project.name }),
+          ...lineVendorTextFields({
+            key: rawScopeItemId || "magic",
+            name: scopeItemName,
+            description: scopeItemDescription,
+            budgetReleased: releasedBudget !== null,
+          }),
+        ],
+      })
+    } catch (err) {
+      console.error("[api] magic-link vendor text check failed; no warnings returned", { route, name: err instanceof Error ? err.name : "unknown" })
+    }
     // is_existing_partner is not returned: no client reads it, and it answered "does this address
     // have a Ligament account" for any email the caller typed.
-    return NextResponse.json({ token: tokenRow.token, expires_at, email_sent: emailSent, attached })
+    return NextResponse.json({ token: tokenRow.token, expires_at, email_sent: emailSent, attached, warnings })
   } catch (error) {
     console.error("[api] failure", {
       route,
