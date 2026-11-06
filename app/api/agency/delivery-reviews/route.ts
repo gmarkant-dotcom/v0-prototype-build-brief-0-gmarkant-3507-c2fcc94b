@@ -165,7 +165,7 @@ export async function POST(req: Request) {
     // belong to this agency before writing anything keyed to them.
     const [{ data: project }, { data: partnership }] = await Promise.all([
       supabase.from("projects").select("id").eq("id", projectId).in("org_id", callerOrgIds).maybeSingle(),
-      supabase.from("partnerships").select("id").eq("id", partnershipId).in("lead_org_id", callerOrgIds).maybeSingle(),
+      supabase.from("partnerships").select("id, vendor_org_id").eq("id", partnershipId).in("lead_org_id", callerOrgIds).maybeSingle(),
     ])
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
     if (!partnership) return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
@@ -177,15 +177,20 @@ export async function POST(req: Request) {
       .eq("partnership_id", partnershipId)
       .maybeSingle()
 
+    // 121, ruling (b): the bid must be this agency's AND this partnership's vendor's. Migration 121's
+    // WITH CHECK refuses any other; a mismatch here is dropped to null, as an unowned bid always was.
     let responseId: string | null = null
     if (requestedResponseId) {
       const { data: responseRow } = await supabase
         .from("partner_rfp_responses")
-        .select("id")
+        .select("id, vendor_org_id")
         .eq("id", requestedResponseId)
         .in("lead_org_id", callerOrgIds)
         .maybeSingle()
-      responseId = responseRow ? (responseRow.id as string) : null
+      responseId =
+        responseRow && responseRow.vendor_org_id && responseRow.vendor_org_id === partnership.vendor_org_id
+          ? (responseRow.id as string)
+          : null
     }
 
     const reviewPatch: Record<string, unknown> = {

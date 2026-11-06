@@ -1,5 +1,6 @@
 import { orgIdsFromColumns, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
+import { resolveVendorBidStatus } from "@/lib/vendor-bid-status"
 import { createClient as createServiceClient, SupabaseClient } from "@supabase/supabase-js"
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 import { buildAgencyBidNotificationEmail, buildAgencyPoolNotificationEmail, buildVendorConfirmationEmail, resolveOrgNotificationRecipients, sendTransactionalEmail } from "@/lib/email"
@@ -564,6 +565,28 @@ export async function POST(req: Request) {
     if (is_edit && !tokenRow.response_id) {
       return NextResponse.json({ error: "No existing bid to edit" }, { status: 400 })
     }
+    // 121, ruling S1. This route writes on the service role, so migration 121's vendor guard does
+    // not see it; the rule is applied here. A guest edit is always a resubmission: it moves draft,
+    // submitted or changes requested (under_review) to submitted, keeps shortlisted and
+    // meeting_requested, and is refused once the bid is awarded or declined.
+    let guestEditStatus = "submitted"
+    if (is_edit) {
+      const { data: currentBid, error: currentBidErr } = await supabase
+        .from("partner_rfp_responses")
+        .select("status")
+        .eq("id", tokenRow.response_id)
+        .maybeSingle()
+      if (currentBidErr || !currentBid) {
+        console.error("[api] failure", { route, method: "POST", code: 500, message: currentBidErr?.message ?? "bid row not found" })
+        return NextResponse.json({ error: "Failed to load your bid" }, { status: 500 })
+      }
+      const decision = resolveVendorBidStatus((currentBid.status as string | null) ?? null, "submitted")
+      if (!decision.ok) {
+        console.log("[api] guest bid edit refused, bid is final", { route, status: decision.current })
+        return NextResponse.json({ error: decision.message, code: "bid_final" }, { status: 409 })
+      }
+      guestEditStatus = decision.status
+    }
 
     const proposal_text = (body.proposal_text || "").toString().trim()
     const amount = Number(body.budget_proposal?.amount)
@@ -649,7 +672,8 @@ export async function POST(req: Request) {
       }
       const { error: updateErr } = await saveGuestResponseRow(
         (attemptRow) => supabase.from("partner_rfp_responses").update(attemptRow).eq("id", tokenRow.response_id),
-        editRow
+        // 121 (S1): the status decided above, never a blind "submitted" over the agency's.
+        { ...editRow, status: guestEditStatus }
       )
 
       if (updateErr) {

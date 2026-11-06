@@ -15,6 +15,7 @@ import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureD
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
 import { isRfpClosureStatus } from "@/lib/rfp-closure"
+import { resolveVendorBidStatus, type VendorRequestedStatus } from "@/lib/vendor-bid-status"
 
 export const dynamic = "force-dynamic"
 
@@ -40,6 +41,7 @@ type Body = {
   /** P2-1/P2-2. Absent on every request shaped like today's. */
   budget_lines?: unknown
   proposal_sections?: unknown
+  /** 121 (S1): absent means "content only, keep the bid's status" (the vendor page autosave). */
   status?: "draft" | "submitted"
   change_notes?: string
 }
@@ -222,7 +224,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const body = (await req.json().catch(() => ({}))) as Body
 
-    const status = body.status === "submitted" ? "submitted" : "draft"
+    // 121 (S1): what the vendor asked for. The status written is decided below, against the
+    // stored one (lib/vendor-bid-status.ts); `status` is the request, and "submitted" means this
+    // save is a submission (validation, version row, summary pending, notifications).
+    const requestedStatus: VendorRequestedStatus =
+      body.status === "submitted" ? "submitted" : body.status === "draft" ? "draft" : null
+    const status = requestedStatus === "submitted" ? "submitted" : "draft"
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
@@ -316,26 +323,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       attachments,
       business_criteria_responses,
       partner_display_name,
-      status,
       updated_at: new Date().toISOString(),
       ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
       ...(budget_lines ? { budget_lines } : {}),
       ...(proposal_sections ? { proposal_sections } : {}),
     }
 
+    const { data: existing, error: existingErr } = await supabase
+      .from("partner_rfp_responses")
+      .select("id, status")
+      .eq("inbox_item_id", inboxId)
+      .in("vendor_org_id", callerOrgIds)
+      .maybeSingle()
+    if (existingErr) {
+      console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: existingErr.message })
+      return NextResponse.json({ error: "Failed to load your bid" }, { status: 500 })
+    }
+
+    // 121, ruling S1. A vendor edit never changes a status the agency set, and a final bid is not
+    // edited at all. Migration 121's guard enforces the same rule for every vendor session; this is
+    // the readable answer, and it keeps the inbox row's status in step below.
+    const decision = resolveVendorBidStatus((existing?.status as string | null | undefined) ?? null, requestedStatus)
+    if (!decision.ok) {
+      console.log("[api] bid edit refused, bid is final", { route, userId: user.id, inboxId, status: decision.current })
+      return NextResponse.json({ error: decision.message, code: "bid_final" }, { status: 409 })
+    }
+    const savedStatus = decision.status
+    const statusRow = { ...row, status: savedStatus }
+
     const insertRow = {
       inbox_item_id: inboxId,
       vendor_org_id: writeOrgId,
       lead_org_id: inbox.lead_org_id,
-      ...row,
+      ...statusRow,
     }
-
-    const { data: existing } = await supabase
-      .from("partner_rfp_responses")
-      .select("id")
-      .eq("inbox_item_id", inboxId)
-      .in("vendor_org_id", callerOrgIds)
-      .maybeSingle()
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let saved: any
@@ -347,7 +368,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           selectVendorResponse((columns) =>
             supabase.from("partner_rfp_responses").update(attemptRow).eq("id", existing.id).select(columns).single()
           ),
-        row
+        statusRow
       )
       if (error) {
         console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: error.message })
@@ -378,10 +399,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     if (status === "submitted") {
-      await supabase
-        .from("partner_rfp_inbox")
-        .update({ status: "bid_submitted", updated_at: new Date().toISOString() })
-        .eq("id", inboxId)
+      // 121 (S1): only when the bid itself is now submitted. A resubmitted shortlisted or
+      // meeting-requested bid keeps its status, so its inbox row keeps the agency's status too.
+      if (savedStatus === "submitted") {
+        await supabase
+          .from("partner_rfp_inbox")
+          .update({ status: "bid_submitted", updated_at: new Date().toISOString() })
+          .eq("id", inboxId)
+      }
 
       const { data: latestVersion } = await supabase
         .from("partner_rfp_response_versions")
@@ -615,6 +640,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       role: profile?.role ?? null,
       recordId: saved?.id,
       status,
+      savedStatus,
       attachmentCount: attachments.length,
     })
     return NextResponse.json({ response: saved })
