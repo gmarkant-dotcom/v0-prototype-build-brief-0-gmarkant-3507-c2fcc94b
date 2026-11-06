@@ -7,6 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDateTime, cn } from "@/lib/utils"
 import { Loader2, Send } from "lucide-react"
+import {
+  buildCardInviteRequest,
+  describeInviteOutcome,
+  hasExistingInvitation,
+  type InviteCheck,
+  type InviteMode,
+  type InviteOutcome,
+} from "@/lib/agency-invite-request"
 
 type MagicTokenRow = {
   id: string
@@ -33,11 +41,12 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
     { is_existing_partner: boolean; has_pending_invite: boolean; has_expired_invite: boolean } | null
   >(null)
   const [sending, setSending] = useState(false)
-  const [sendMessage, setSendMessage] = useState<string | null>(null)
+  const [sendMessage, setSendMessage] = useState<InviteOutcome | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [invites, setInvites] = useState<MagicTokenRow[]>([])
   const [invitesLoading, setInvitesLoading] = useState(true)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [rowOutcome, setRowOutcome] = useState<({ id: string } & InviteOutcome) | null>(null)
 
   const loadInvites = async () => {
     setInvitesLoading(true)
@@ -80,30 +89,53 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
     return () => clearTimeout(t)
   }, [email, projectId])
 
+  const postInvite = async (mode: InviteMode, body: Record<string, unknown>): Promise<InviteOutcome> => {
+    try {
+      const res = await fetch("/api/agency/rfp/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      return describeInviteOutcome({ mode, status: res.status, data })
+    } catch {
+      return describeInviteOutcome({ mode, status: 0, data: null })
+    }
+  }
+
   const sendInvite = async () => {
     setSending(true)
     setSendError(null)
     setSendMessage(null)
     try {
-      const res = await fetch("/api/agency/rfp/magic-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vendor_email: email.trim(),
-          vendor_name: name.trim() || undefined,
-          project_id: projectId,
-          require_terms_disclosure: requireTermsDisclosure,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Failed to send invitation")
-      setSendMessage("Invitation sent. Link expires in 72 hours.")
+      // G1: checked again at click time, not taken from the debounced hint, so an address typed and
+      // sent within the debounce window is never sent as a first send over an existing invitation.
+      // This form carries no RFP content, so a first send there would blank the stored invitation.
+      // If the check fails nothing is sent.
+      const trimmed = email.trim().toLowerCase()
+      let check: InviteCheck | null = null
+      try {
+        const res = await fetch(
+          `/api/agency/rfp/magic-link?check_email=${encodeURIComponent(trimmed)}&project_id=${encodeURIComponent(projectId)}`,
+          { cache: "no-store" }
+        )
+        if (!res.ok) throw new Error("check failed")
+        check = (await res.json()) as InviteCheck
+      } catch {
+        setSendError("Could not check for an existing invitation, so nothing was sent. Please try again.")
+        return
+      }
+      const request = buildCardInviteRequest({ email, name, projectId, requireTermsDisclosure, check })
+      const outcome = await postInvite(request.mode, request.body)
+      if (outcome.tone === "error") {
+        setSendError(outcome.message)
+        return
+      }
+      setSendMessage(outcome)
       setEmail("")
       setName("")
       setCheckResult(null)
       void loadInvites()
-    } catch (err) {
-      setSendError(err instanceof Error ? err.message : "Failed to send invitation")
     } finally {
       setSending(false)
     }
@@ -111,24 +143,26 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
 
   const resendInvite = async (row: MagicTokenRow) => {
     setResendingId(row.id)
+    setRowOutcome(null)
     try {
-      const res = await fetch("/api/agency/rfp/magic-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vendor_email: row.vendor_email,
-          vendor_name: row.vendor_name || undefined,
-          project_id: projectId,
-          // F7: renews the link only. Without this flag the route treats the call as a first send
-          // and overwrites the invitation's criteria, categories and materials with this empty body.
-          resend: true,
-        }),
+      // F7: renews the link only. Without `resend: true` the route treats the call as a first send
+      // and overwrites the invitation's criteria, categories and materials with this empty body.
+      const outcome = await postInvite("resend", {
+        vendor_email: row.vendor_email,
+        vendor_name: row.vendor_name || undefined,
+        project_id: projectId,
+        resend: true,
       })
-      if (res.ok) void loadInvites()
+      // G3: every result is shown on the row, including 404 "no invitation to resend".
+      setRowOutcome({ id: row.id, ...outcome })
+      // Not reloaded on an error: the row, and its message, stay where the agency clicked.
+      if (outcome.tone !== "error") void loadInvites()
     } finally {
       setResendingId(null)
     }
   }
+
+  const existingInvite = hasExistingInvitation(checkResult)
 
   return (
     <GlassCard>
@@ -151,9 +185,9 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
               {checking
                 ? "Checking…"
                 : checkResult?.has_pending_invite
-                  ? "An active invitation already exists - resending delivers the same link with a refreshed expiry."
+                  ? "An active invitation already exists. Resending delivers the same link with a refreshed expiry and keeps the RFP content it was sent with."
                   : checkResult?.has_expired_invite
-                    ? "The previous link expired - a new one will be sent."
+                    ? "The previous link expired. Resending sends a new link and keeps the RFP content it was sent with."
                     : checkResult?.is_existing_partner
                       ? "Already in your vendor pool"
                       : "New vendor - will receive a guest invitation"}
@@ -167,16 +201,19 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
           className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
         />
       </div>
-      <label className="mt-3 flex items-center gap-2 cursor-pointer">
+      <label className={cn("mt-3 flex items-center gap-2", existingInvite ? "opacity-60" : "cursor-pointer")}>
         <Checkbox
           checked={requireTermsDisclosure}
+          disabled={existingInvite}
           onCheckedChange={(v) => setRequireTermsDisclosure(v === true)}
           className="border-border"
         />
         <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
       </label>
       <p className="font-mono text-2xs text-foreground-muted mt-1">
-        Vendors state payment, cancellation, IP, and rate-validity terms up front.
+        {existingInvite
+          ? "A resend keeps the existing invitation's term disclosure setting."
+          : "Vendors state payment, cancellation, IP, and rate-validity terms up front."}
       </p>
       <div className="mt-3 flex items-center gap-3 flex-wrap">
         <Button
@@ -191,12 +228,23 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
             </span>
           ) : (
             <span className="flex items-center gap-2">
-              <Send className="w-4 h-4" /> Send Invitation
+              <Send className="w-4 h-4" /> {existingInvite ? "Resend Invitation" : "Send Invitation"}
             </span>
           )}
         </Button>
-        {sendMessage && <span className="font-mono text-xs text-accent">{sendMessage}</span>}
-        {sendError && <span className="font-mono text-xs text-red-400">{sendError}</span>}
+        {sendMessage && (
+          <span
+            role="status"
+            className={cn("font-mono text-xs", sendMessage.tone === "warning" ? "text-amber-300" : "text-accent")}
+          >
+            {sendMessage.message}
+          </span>
+        )}
+        {sendError && (
+          <span role="alert" className="font-mono text-xs text-red-400">
+            {sendError}
+          </span>
+        )}
       </div>
 
       <div className="mt-6 pt-6 border-t border-border/30">
@@ -256,6 +304,21 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
                     >
                       View Bid
                     </a>
+                  )}
+                  {rowOutcome?.id === row.id && (
+                    <p
+                      role={rowOutcome.tone === "error" ? "alert" : "status"}
+                      className={cn(
+                        "basis-full font-mono text-2xs",
+                        rowOutcome.tone === "error"
+                          ? "text-red-400"
+                          : rowOutcome.tone === "warning"
+                            ? "text-amber-300"
+                            : "text-accent"
+                      )}
+                    >
+                      {rowOutcome.message}
+                    </p>
                   )}
                 </div>
               )
