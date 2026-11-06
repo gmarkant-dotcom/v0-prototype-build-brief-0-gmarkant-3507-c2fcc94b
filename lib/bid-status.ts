@@ -31,6 +31,17 @@ export function mapResponseStatusToInboxStatus(status: string): string {
   return "bid_submitted"
 }
 
+/**
+ * Where the agency's shortlist toggle sends a bid (bid detail sheet and compare view). Removing a
+ * bid from the shortlist returns it to "submitted", not "under_review": under_review is what the
+ * vendor sees as "Changes Requested", and taking a bid off the shortlist asks for no changes.
+ * Feedback on a submitted bid ("Request changes") stays the agency's path into under_review.
+ * shortlisted_at is not cleared on the way out: it records that the shortlist happened.
+ */
+export function shortlistToggleStatus(current: string): "submitted" | "shortlisted" {
+  return current === "shortlisted" ? "submitted" : "shortlisted"
+}
+
 export function getBidStatusLabel(status: string, userType: "agency" | "partner"): string {
   const normalized = (status || "").toLowerCase() as BidStatus
 

@@ -12,6 +12,7 @@ import {
   attachmentHref,
 } from "@/lib/bid-shared"
 import { buildBidTimeline } from "@/lib/bid-timeline"
+import { shortlistToggleStatus } from "@/lib/bid-status"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
@@ -356,7 +357,7 @@ function BidDetailSheetInner({
                       )}
                       onMouseEnter={() => row.status === "shortlisted" && setShortlistHover(true)}
                       onMouseLeave={() => row.status === "shortlisted" && setShortlistHover(false)}
-                      onClick={() => patchResponse({ status: row.status === "shortlisted" ? "under_review" : "shortlisted" })}
+                      onClick={() => patchResponse({ status: shortlistToggleStatus(row.status) })}
                       disabled={busy || isAwarded}
                     >
                       <Star className={cn("w-3.5 h-3.5 mr-1.5", row.status === "shortlisted" && !shortlistHover && "fill-current")} />
