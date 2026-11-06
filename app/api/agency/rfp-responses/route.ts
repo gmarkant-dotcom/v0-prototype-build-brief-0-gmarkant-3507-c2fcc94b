@@ -93,7 +93,7 @@ export async function GET(request: Request) {
     let responsesQuery = supabase
       .from("partner_rfp_responses")
       .select(
-        "id, inbox_item_id, vendor_org_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, terms_disclosure, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
+        "id, inbox_item_id, vendor_org_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, terms_disclosure, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, shortlisted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
       )
       .in("lead_org_id", callerOrgIds)
       .order("updated_at", { ascending: false })

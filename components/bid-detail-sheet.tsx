@@ -12,7 +12,7 @@ import {
   attachmentHref,
 } from "@/lib/bid-shared"
 import { buildBidTimeline } from "@/lib/bid-timeline"
-import { shortlistToggleStatus } from "@/lib/bid-status"
+import { meetingCancelStatus, shortlistToggleStatus } from "@/lib/bid-status"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
@@ -329,7 +329,9 @@ function BidDetailSheetInner({
                       onMouseEnter={() => row.status === "meeting_requested" && setMeetingHover(true)}
                       onMouseLeave={() => row.status === "meeting_requested" && setMeetingHover(false)}
                       onClick={() =>
-                        patchResponse({ status: row.status === "meeting_requested" ? "under_review" : "meeting_requested" })
+                        patchResponse({
+                          status: row.status === "meeting_requested" ? meetingCancelStatus(row.shortlisted_at) : "meeting_requested",
+                        })
                       }
                       disabled={busy || isAwarded}
                     >

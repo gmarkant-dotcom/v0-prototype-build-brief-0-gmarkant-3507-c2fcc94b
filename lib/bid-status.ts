@@ -42,6 +42,17 @@ export function shortlistToggleStatus(current: string): "submitted" | "shortlist
   return current === "shortlisted" ? "submitted" : "shortlisted"
 }
 
+/**
+ * Where the agency's "Cancel Meeting Request" sends a bid (bid detail sheet). Same reasoning as
+ * shortlistToggleStatus: cancelling a meeting asks the vendor for no changes, so it must not land
+ * on under_review ("Changes Requested"). The bid goes back to where the agency had it: shortlisted
+ * if it was ever shortlisted (shortlisted_at is set, and the PATCH route never clears or re-stamps
+ * it), otherwise submitted.
+ */
+export function meetingCancelStatus(shortlistedAt: string | null | undefined): "submitted" | "shortlisted" {
+  return shortlistedAt ? "shortlisted" : "submitted"
+}
+
 export function getBidStatusLabel(status: string, userType: "agency" | "partner"): string {
   const normalized = (status || "").toLowerCase() as BidStatus
 
