@@ -19,7 +19,13 @@ import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { exactEmailIlike } from "@/lib/server/account-existence"
 import { vendorTokenReferenceMaterials } from "@/lib/rfp-vendor-copy"
-import { checkVendorText, lineVendorTextFields, sharedVendorTextFields, type VendorTextMatch } from "@/lib/rfp-vendor-text-check"
+import {
+  checkVendorText,
+  criteriaAndCategoryVendorTextFields,
+  lineVendorTextFields,
+  sharedVendorTextFields,
+  type VendorTextMatch,
+} from "@/lib/rfp-vendor-text-check"
 import { readProjectClientNames } from "@/lib/server/rfp-vendor-text"
 import {
   createRfpRecordDraft,
@@ -701,6 +707,12 @@ export async function POST(request: NextRequest) {
         clientNames: [project.client_name as string | null, ...names],
         fields: [
           ...sharedVendorTextFields({ projectName: project.name }),
+          // G4 (finding F1): the budget category names and notes and the requirements notes, the
+          // same normalized values the token row carries and the browser check covers.
+          ...criteriaAndCategoryVendorTextFields({
+            budget_categories: budgetCategories,
+            business_criteria_required: businessCriteriaRequired,
+          }),
           ...lineVendorTextFields({
             key: rawScopeItemId || "magic",
             name: scopeItemName,
