@@ -58,7 +58,12 @@ import {
 } from "@/lib/rfp-record-copy"
 import { ClientVisibilitySwitch } from "@/components/rfp-client-visibility-control"
 import { VendorTextWarnings } from "@/components/vendor-text-warnings"
-import { lineVendorTextFields, sharedVendorTextFields } from "@/lib/rfp-vendor-text-check"
+import {
+  criteriaAndCategoryVendorTextFields,
+  lineVendorTextFields,
+  parseCriteriaOrCategoryField,
+  sharedVendorTextFields,
+} from "@/lib/rfp-vendor-text-check"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
@@ -1109,7 +1114,8 @@ function AgencyRFPContent() {
   /**
    * OV-A: an accepted vendor-safe rewrite goes back into the field it came from. Field ids are the
    * ones lib/rfp-vendor-text-check.ts builds: projectName, overview, objectives.<i>, timeline, and
-   * line.<scope item id>.name|description|timeline (the scope items the broadcast sends).
+   * line.<scope item id>.name|description|timeline (the scope items the broadcast sends), and from G4
+   * budget_categories.<key>.name|note and business_criteria_required.notes|insurance.<key>.minimum.
    */
   const applyVendorText = (field: string, text: string) => {
     const lineMatch = /^line\.(.+)\.(name|description|timeline)$/.exec(field)
@@ -1119,8 +1125,26 @@ function AgencyRFPContent() {
       return
     }
     const objectiveMatch = /^objectives\.(\d+)$/.exec(field)
+    const g4 = parseCriteriaOrCategoryField(field)
     setMasterRfp((prev) => {
       if (!prev) return prev
+      if (g4?.kind === "category") {
+        return {
+          ...prev,
+          budget_categories: prev.budget_categories.map((c) =>
+            c.key === g4.key ? (g4.part === "name" ? { ...c, name: text } : { ...c, note: text.trim() ? text : null }) : c
+          ),
+        }
+      }
+      if (g4?.kind === "criteria_notes") {
+        return { ...prev, business_criteria_required: { ...prev.business_criteria_required, notes: text } }
+      }
+      if (g4?.kind === "insurance_minimum") {
+        const row = prev.business_criteria_required.insurance[g4.key]
+        if (!row) return prev
+        const insurance = { ...prev.business_criteria_required.insurance, [g4.key]: { ...row, minimum: text } }
+        return { ...prev, business_criteria_required: { ...prev.business_criteria_required, insurance } }
+      }
       if (objectiveMatch) {
         const index = Number(objectiveMatch[1])
         return { ...prev, objectives: prev.objectives.map((o, i) => (i === index ? text : o)) }
@@ -3091,6 +3115,7 @@ function AgencyRFPContent() {
                   clientNames: [masterRfp.client, clientSelection.clientName, selectedProject?.client],
                   fields: [
                     ...sharedVendorTextFields(masterRfp),
+                    ...criteriaAndCategoryVendorTextFields(masterRfp),
                     ...outsourcedItems.flatMap((item) =>
                       lineVendorTextFields({
                         key: item.id,

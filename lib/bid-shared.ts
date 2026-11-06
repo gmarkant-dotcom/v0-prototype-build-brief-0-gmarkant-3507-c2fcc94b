@@ -73,6 +73,8 @@ export type RfpRecordSummary = {
   project_name: string | null
   broadcast_at: string | null
   text_warnings: { names_client: boolean; shows_figures: boolean }
+  /** Distinct vendors holding a copy of this RFP; null when it could not be read. */
+  vendor_count?: number | null
 }
 
 // ── Terms disclosure display ────────────────────────────────────────────────
