@@ -252,7 +252,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: existing, error: existingErr } = await supabase
       .from("partner_rfp_responses")
-      .select("id, vendor_org_id, lead_org_id, inbox_item_id, status, agency_feedback")
+      .select("id, vendor_org_id, lead_org_id, inbox_item_id, status, agency_feedback, shortlisted_at, meeting_requested_at")
       .eq("id", id)
       .in("lead_org_id", callerOrgIds)
       .maybeSingle()
@@ -357,11 +357,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // Bid action timestamps (migration 069) - only stamped on the transition into that
     // status, mirroring the awarded_at/decline-email guards below. No timestamp is ever
-    // overwritten by a later transition away from and back to the same status.
-    if (isShortlisting) {
+    // overwritten by a later transition away from and back to the same status: shortlisted_at
+    // and meeting_requested_at are stamped only while still null, so the first stamp wins and
+    // the vendor's activity history keeps the original date. The capability gates and the
+    // milestone still key on isShortlisting / isRequestingMeeting, unchanged.
+    if (isShortlisting && !existing.shortlisted_at) {
       patch.shortlisted_at = patch.updated_at
     }
-    if (isRequestingMeeting) {
+    if (isRequestingMeeting && !existing.meeting_requested_at) {
       patch.meeting_requested_at = patch.updated_at
     }
     if (isDeclining) {
@@ -857,9 +860,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      * closed on 2026-08-20 - and the agency tells them that nowhere else in the product.
      *
      * Fires on the transition only: `isShortlisting` / `isRequestingMeeting` are the same
-     * booleans that stamp shortlisted_at / meeting_requested_at above, so a re-save of an
-     * already-shortlisted bid stamps nothing and records nothing. They are mutually exclusive,
-     * so this block emits at most one row per request.
+     * booleans that gate the shortlisted_at / meeting_requested_at stamps above, so a re-save
+     * of an already-shortlisted bid stamps nothing and records nothing. A second entry into
+     * the same status still records a milestone, but does not re-stamp (first stamp wins).
+     * They are mutually exclusive, so this block emits at most one row per request.
      *
      * Placed after the update, like the other three: an emitter observes an action that has
      * already succeeded, and recordMilestone() is fire-and-forget, so nothing here can change
