@@ -10,6 +10,7 @@ import {
   termsSummaryLine,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
+import { shortlistToggleStatus } from "@/lib/bid-status"
 import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
   DESIGNATION_KEYS,
@@ -379,7 +380,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                           )}
                           disabled={busyId === row.id || row.status === "awarded"}
                           onClick={() =>
-                            void patchRow(row, { status: row.status === "shortlisted" ? "under_review" : "shortlisted" })
+                            void patchRow(row, { status: shortlistToggleStatus(row.status) })
                           }
                         >
                           <Star className="w-3 h-3 mr-1" /> Shortlist

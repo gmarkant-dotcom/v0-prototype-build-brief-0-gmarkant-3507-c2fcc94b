@@ -14,6 +14,7 @@ import {
   summarizeVendorTextMatches,
   type VendorTextField,
 } from "./rfp-vendor-text-check"
+import { pickVendorCopy } from "./rfp-vendor-copy"
 
 let passed = 0
 function check(label: string, actual: unknown, expected: unknown) {
@@ -225,6 +226,23 @@ check(
 check("G4 parse: unknown insurance key", parseCriteriaOrCategoryField("business_criteria_required.insurance.pets.minimum"), null)
 check("G4 parse: other ids are not G4", parseCriteriaOrCategoryField("overview"), null)
 check("G4 parse: round trip of every built id", g4Fields.every((f) => parseCriteriaOrCategoryField(f.field) !== null), true)
+
+// ── F1: the broadcast route checks the vendor copy, not the raw master ─────────────
+// app/api/agency/broadcast-rfp/route.ts builds its G4 fields from pickVendorCopy(masterRfp); the
+// browser check builds them from the master itself. Both must give the same fields.
+{
+  const master = { ...g4Source, client: "Nike", totalBudget: "$2M", overview: "O" }
+  check(
+    "F1: vendor copy keeps every G4 field",
+    criteriaAndCategoryVendorTextFields(pickVendorCopy(master)).map((f) => f.field),
+    criteriaAndCategoryVendorTextFields(master).map((f) => f.field)
+  )
+  check(
+    "F1: vendor copy G4 warnings match the browser check",
+    checkVendorText({ clientHidden: true, clientNames: ["Nike"], fields: criteriaAndCategoryVendorTextFields(pickVendorCopy(master)) }),
+    checkVendorText({ clientHidden: true, clientNames: ["Nike"], fields: criteriaAndCategoryVendorTextFields(master) })
+  )
+}
 
 // ── Word diff ───────────────────────────────────────────────────────────────
 check("diff: unchanged", diffWords("a b", "a b"), [{ kind: "same", text: "a b" }])

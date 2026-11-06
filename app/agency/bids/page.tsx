@@ -454,8 +454,10 @@ function RfpRecordHeader({
             : null
         const namesClient = !record.show_client_to_vendors && record.text_warnings.names_client
         return (
-          <div key={record.id} className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0 flex items-center gap-2 flex-wrap font-mono text-2xs text-foreground-muted">
+          // The outer row never wraps, so the client tag holds the header line at the right; the
+          // left side takes the remaining width and wraps the warning tags beneath the title.
+          <div key={record.id} className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap font-mono text-2xs text-foreground-muted">
               <span className="uppercase tracking-wider">{SOURCE_LABEL[record.source]}</span>
               {record.project_name && <span className="text-foreground truncate">{record.project_name}</span>}
               {record.broadcast_at && <span>Sent {formatDateTime(record.broadcast_at)}</span>}
@@ -483,6 +485,7 @@ function RfpRecordHeader({
               clientName={record.client_name}
               vendorCount={record.vendor_count ?? null}
               onSaved={onRecordSaved}
+              className="shrink-0"
             />
           </div>
         )

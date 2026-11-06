@@ -19,7 +19,13 @@ import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { buildVendorCopy, pickVendorCopy, type VendorCopyRecord } from "@/lib/rfp-vendor-copy"
-import { checkVendorText, lineVendorTextFields, sharedVendorTextFields, type VendorTextField } from "@/lib/rfp-vendor-text-check"
+import {
+  checkVendorText,
+  criteriaAndCategoryVendorTextFields,
+  lineVendorTextFields,
+  sharedVendorTextFields,
+  type VendorTextField,
+} from "@/lib/rfp-vendor-text-check"
 import { readProjectClientNames } from "@/lib/server/rfp-vendor-text"
 import {
   broadcastRecordFieldsSchema,
@@ -236,10 +242,17 @@ export async function POST(request: NextRequest) {
         const names = verifiedProject
           ? (await readProjectClientNames(supabase, "POST /api/agency/broadcast-rfp", [verifiedProject.id], callerOrgIds)).get(verifiedProject.id) ?? []
           : []
+        const vendorCopy = pickVendorCopy(masterRfp)
         return checkVendorText({
           clientHidden: !showClientToVendors,
           clientNames: [clientNameSnapshot, ...names],
-          fields: [...sharedVendorTextFields(pickVendorCopy(masterRfp)), ...lineTextFields],
+          // G4 (finding F1): the budget category names and notes and the requirements notes the
+          // browser check covers, from the same normalized vendor copy every inbox row carries.
+          fields: [
+            ...sharedVendorTextFields(vendorCopy),
+            ...criteriaAndCategoryVendorTextFields(vendorCopy),
+            ...lineTextFields,
+          ],
         })
       } catch (err) {
         console.error("[broadcast-rfp] vendor text check failed; no warnings returned", { name: err instanceof Error ? err.name : "unknown" })
