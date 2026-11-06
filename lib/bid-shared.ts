@@ -45,6 +45,9 @@ export type BidRow = {
   submitted_at?: string | null
   rfp_sent_at?: string | null
   awarded_at?: string | null
+  /** Migration 069. Read by meetingCancelStatus() in lib/bid-status.ts: set means the bid was
+   *  shortlisted at some point, so cancelling a meeting request returns it to shortlisted. */
+  shortlisted_at?: string | null
   created_at: string
   updated_at: string
   inbox: {
