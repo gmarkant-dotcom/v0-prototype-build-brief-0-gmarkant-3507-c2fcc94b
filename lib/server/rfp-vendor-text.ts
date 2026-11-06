@@ -2,6 +2,7 @@ import type { OrgId } from "@/lib/entitlements"
 import { pickVendorCopy } from "@/lib/rfp-vendor-copy"
 import {
   checkVendorText,
+  criteriaAndCategoryVendorTextFields,
   lineVendorTextFields,
   sharedVendorTextFields,
   summarizeVendorTextMatches,
@@ -89,12 +90,19 @@ export type RfpRecordClientSummary = {
    * only while the client IS hidden). shows_figures: money or percentages per OV-A.
    */
   text_warnings: { names_client: boolean; shows_figures: boolean }
+  /**
+   * CV1: how many distinct vendors hold a copy of this RFP (every inbox row and token linked to its
+   * lines, the same set migration 119's rfp_record_set_client_visibility rewrites). A vendor is its
+   * organization, or its email while it has none. Null when the links could not be read.
+   */
+  vendor_count: number | null
 }
 
 /**
  * The summaries for the records behind the bids list, batched: one read of the records, then their
- * lines and their projects' client names in parallel. Never one call per row. A read failure answers
- * with fewer summaries (the page then shows no control for those groups), never an error.
+ * lines and their projects' client names in parallel, then the inbox rows and tokens of all those
+ * lines in parallel (the vendor counts). Never one call per row or per record. A read failure answers
+ * with fewer summaries (the page then shows no tag for those groups) or a null count, never an error.
  */
 export async function readRecordClientSummaries(
   client: RfpRecordClient,
@@ -108,7 +116,7 @@ export async function readRecordClientSummaries(
 
   const { data: records, error } = await client
     .from("rfp_records")
-    .select("id, source, show_client_to_vendors, client_name_snapshot, broadcast_at, project_id, master_rfp")
+    .select("id, source, show_client_to_vendors, client_name_snapshot, broadcast_at, project_id, master_rfp, budget_categories, business_criteria_required")
     .in("id", ids)
     .in("lead_org_id", orgIds as OrgId[])
   if (error) {
@@ -123,6 +131,8 @@ export async function readRecordClientSummaries(
     broadcast_at: string | null
     project_id: string | null
     master_rfp: unknown
+    budget_categories: unknown
+    business_criteria_required: unknown
   }
   const recordRows = (records || []) as RecordRow[]
   if (recordRows.length === 0) return out
@@ -137,6 +147,7 @@ export async function readRecordClientSummaries(
   ])
   if (linesResult.error) logReadFailure(site, "rfp_record_lines", linesResult.error)
   type LineRow = {
+    id: string
     rfp_id: string
     scope_item_key: string
     scope_item_name: string | null
@@ -149,6 +160,9 @@ export async function readRecordClientSummaries(
     list.push(l)
     linesByRecord.set(l.rfp_id, list)
   }
+  const vendorCounts = linesResult.error
+    ? null
+    : await readVendorCountsByRecord(client, site, (linesResult.data || []) as LineRow[], orgIds)
 
   for (const r of recordRows) {
     const master =
@@ -156,7 +170,15 @@ export async function readRecordClientSummaries(
         ? (r.master_rfp as Record<string, unknown>)
         : {}
     // The vendor reads only the allow-listed keys; the record also holds the agency's own keys.
-    const fields: VendorTextField[] = sharedVendorTextFields(pickVendorCopy(master))
+    const vendorCopy = pickVendorCopy(master)
+    const fields: VendorTextField[] = [
+      ...sharedVendorTextFields(vendorCopy),
+      // G4: the record's own columns are what the vendor copies carry; the master_rfp keys are the fallback.
+      ...criteriaAndCategoryVendorTextFields({
+        budget_categories: r.budget_categories ?? vendorCopy.budget_categories,
+        business_criteria_required: r.business_criteria_required ?? vendorCopy.business_criteria_required,
+      }),
+    ]
     const scopeTimelineByKey = scopeTimelines(master)
     for (const l of linesByRecord.get(r.id) ?? []) {
       fields.push(
@@ -179,9 +201,70 @@ export async function readRecordClientSummaries(
       project_name: trimmed(master.projectName),
       broadcast_at: r.broadcast_at,
       text_warnings: { names_client: flags.namesClient, shows_figures: flags.showsFigures },
+      vendor_count: vendorCounts ? vendorCounts.get(r.id) ?? 0 : null,
     })
   }
   return out
+}
+
+/**
+ * Distinct vendors per record, from every inbox row and token linked to the given lines: two reads
+ * in parallel for all lines at once. A vendor is its organization; an inbox row not yet claimed, or a
+ * token not attached to an inbox row, counts by its email (lower-cased), and an email already seen on
+ * an inbox row counts as that row's vendor. Null when either read fails.
+ */
+async function readVendorCountsByRecord(
+  client: RfpRecordClient,
+  site: string,
+  lines: readonly { id: string; rfp_id: string }[],
+  orgIds: readonly OrgId[]
+): Promise<Map<string, number> | null> {
+  const recordByLine = new Map(lines.map((l) => [l.id, l.rfp_id]))
+  const lineIds = [...recordByLine.keys()]
+  if (lineIds.length === 0) return new Map()
+  const [inboxResult, tokenResult] = await Promise.all([
+    client
+      .from("partner_rfp_inbox")
+      .select("id, rfp_line_id, vendor_org_id, recipient_email")
+      .in("rfp_line_id", lineIds)
+      .in("lead_org_id", orgIds as OrgId[]),
+    client
+      .from("rfp_magic_tokens")
+      .select("rfp_line_id, attached_inbox_id, vendor_email")
+      .in("rfp_line_id", lineIds)
+      .in("org_id", orgIds as OrgId[]),
+  ])
+  if (inboxResult.error || tokenResult.error) {
+    logReadFailure(site, inboxResult.error ? "partner_rfp_inbox vendors" : "rfp_magic_tokens vendors", inboxResult.error ?? tokenResult.error)
+    return null
+  }
+  const email = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().toLowerCase() : null)
+  const vendorsByRecord = new Map<string, Set<string>>()
+  const add = (recordId: string | undefined, vendor: string) => {
+    if (!recordId) return
+    const set = vendorsByRecord.get(recordId) ?? new Set<string>()
+    set.add(vendor)
+    vendorsByRecord.set(recordId, set)
+  }
+  type InboxRow = { id: string; rfp_line_id: string; vendor_org_id: string | null; recipient_email: string | null }
+  type TokenRow = { rfp_line_id: string; attached_inbox_id: string | null; vendor_email: string | null }
+  const vendorByInbox = new Map<string, string>()
+  const vendorByEmail = new Map<string, string>()
+  for (const row of (inboxResult.data || []) as InboxRow[]) {
+    const mail = email(row.recipient_email)
+    const vendor = row.vendor_org_id ? `org:${row.vendor_org_id}` : mail ? `email:${mail}` : `inbox:${row.id}`
+    vendorByInbox.set(row.id, vendor)
+    if (mail && !vendorByEmail.has(mail)) vendorByEmail.set(mail, vendor)
+    add(recordByLine.get(row.rfp_line_id), vendor)
+  }
+  for (const row of (tokenResult.data || []) as TokenRow[]) {
+    const mail = email(row.vendor_email)
+    const vendor =
+      (row.attached_inbox_id ? vendorByInbox.get(row.attached_inbox_id) : undefined) ??
+      (mail ? vendorByEmail.get(mail) ?? `email:${mail}` : null)
+    if (vendor) add(recordByLine.get(row.rfp_line_id), vendor)
+  }
+  return new Map([...vendorsByRecord].map(([recordId, set]) => [recordId, set.size]))
 }
 
 /** A wizard line's own timeline lives in the record's master_rfp.scopeItems (the vendor row's timeline column). */
