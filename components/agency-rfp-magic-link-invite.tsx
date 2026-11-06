@@ -119,6 +119,9 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
           vendor_email: row.vendor_email,
           vendor_name: row.vendor_name || undefined,
           project_id: projectId,
+          // F7: renews the link only. Without this flag the route treats the call as a first send
+          // and overwrites the invitation's criteria, categories and materials with this empty body.
+          resend: true,
         }),
       })
       if (res.ok) void loadInvites()
