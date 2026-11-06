@@ -64,9 +64,12 @@ import {
   parseCriteriaOrCategoryField,
   sharedVendorTextFields,
 } from "@/lib/rfp-vendor-text-check"
+import { buildWizardGuestInviteBody, describeInviteOutcome, type InviteOutcome } from "@/lib/agency-invite-request"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
+
+type GuestInviteOutcome = { email: string; scopeItemName: string } & InviteOutcome
 
 type ScopeItem = {
   id: string
@@ -623,6 +626,8 @@ function AgencyRFPContent() {
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
+  /** G3: one entry per guest (magic-link) recipient of the last broadcast. */
+  const [guestInviteOutcomes, setGuestInviteOutcomes] = useState<GuestInviteOutcome[]>([])
   const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
@@ -1279,6 +1284,7 @@ function AgencyRFPContent() {
   // Broadcast RFPs (persist per-recipient rows for partner inbox when not demo)
   const broadcastRfps = async () => {
     setBroadcastError(null)
+    setGuestInviteOutcomes([])
     if (!masterRfp) {
       setBroadcastError("Generate a Master RFP before broadcasting.")
       return
@@ -1365,34 +1371,44 @@ function AgencyRFPContent() {
           )
         }
       }
+      const guestOutcomes: GuestInviteOutcome[] = []
       if (magicLinkQueue.length > 0 && selectedProject?.id) {
         for (const recipient of magicLinkQueue) {
+          let outcome: InviteOutcome
           try {
-            await fetch("/api/agency/rfp/magic-link", {
+            const res = await fetch("/api/agency/rfp/magic-link", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                vendor_email: recipient.email,
-                vendor_name: recipient.name || undefined,
-                project_id: selectedProject.id,
-                scope_item_name: recipient.scopeItem.name,
-                scope_item_description: recipient.scopeItem.description,
-                reference_materials: referenceMaterials,
-                require_terms_disclosure: requireTermsDisclosure,
-                // F2: same responseDeadline computed above for the standard-broadcast body -
-                // was captured by the wizard but never sent on this path at all.
-                response_deadline: responseDeadline,
-                // Migration 118: the same two choices, for this send's own RFP record.
-                show_client_to_vendors: showClientToVendors,
-                release_budget: releaseBudgetByScope[recipient.scopeItem.id] === true,
-                estimated_budget: (recipient.scopeItem.estimatedBudget || "").slice(0, 200) || undefined,
-              }),
+              // G2: a first send with the wizard's full content. F2 (deadline) and 118 (client
+              // toggle, release) as before; criteria, categories, business criteria and the close
+              // flag added, so a send to an address that already has a token no longer blanks them.
+              body: JSON.stringify(
+                buildWizardGuestInviteBody({
+                  email: recipient.email,
+                  name: recipient.name,
+                  projectId: selectedProject.id,
+                  scopeItem: recipient.scopeItem,
+                  referenceMaterials,
+                  requireTermsDisclosure,
+                  responseDeadline,
+                  showClientToVendors,
+                  releaseBudget: releaseBudgetByScope[recipient.scopeItem.id] === true,
+                  closeBiddingAtDeadline,
+                  masterRfp,
+                })
+              ),
             })
+            const data = await res.json().catch(() => ({}))
+            outcome = describeInviteOutcome({ mode: "first", status: res.status, data })
           } catch (magicLinkErr) {
             console.error("Magic link invite failed:", recipient.email, magicLinkErr)
+            outcome = describeInviteOutcome({ mode: "first", status: 0, data: null })
           }
+          guestOutcomes.push({ email: recipient.email, scopeItemName: recipient.scopeItem.name, ...outcome })
         }
       }
+      // G3: shown on the completion screen. The standard broadcast above already succeeded or threw.
+      setGuestInviteOutcomes(guestOutcomes)
       if (referenceMaterials.length > 0) {
         await saveReferenceMaterialsToLibrary(referenceMaterials)
       }
@@ -1409,6 +1425,7 @@ function AgencyRFPContent() {
     setCurrentStep(1)
     setBroadcastComplete(false)
     setBroadcastError(null)
+    setGuestInviteOutcomes([])
     setRequireTermsDisclosure(true)
     setShowClientToVendors(false)
     setReleaseBudgetByScope({})
@@ -3165,7 +3182,11 @@ function AgencyRFPContent() {
             <div className="w-20 h-20 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-6">
               <Check className="w-10 h-10 text-success" />
             </div>
-            <h2 className="font-display font-bold text-2xl text-foreground mb-2">RFPs Broadcasted Successfully!</h2>
+            <h2 className="font-display font-bold text-2xl text-foreground mb-2">
+              {guestInviteOutcomes.some((o) => o.tone === "error")
+                ? "Broadcast finished, but some guest invitations failed"
+                : "RFPs Broadcasted Successfully!"}
+            </h2>
             <p className="text-foreground-muted mb-6 max-w-md mx-auto">
               {outsourcedItems.length} RFP{outsourcedItems.length > 1 ? 's' : ''} sent to{' '}
               {Object.values(selectedPartners).flat().length + Object.values(newRecipients).flat().length} partner{Object.values(selectedPartners).flat().length + Object.values(newRecipients).flat().length > 1 ? 's' : ''}.
@@ -3178,6 +3199,31 @@ function AgencyRFPContent() {
                 </span>
               ))}
             </div>
+            {/* G3: one line per guest (magic-link) recipient, so a failed or email-less invitation is visible. */}
+            {guestInviteOutcomes.length > 0 && (
+              <div className="max-w-xl mx-auto mb-8 text-left space-y-2">
+                <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">Guest invitations</div>
+                {guestInviteOutcomes.map((o) => (
+                  <div
+                    key={`${o.email}:${o.scopeItemName}`}
+                    role={o.tone === "error" ? "alert" : "status"}
+                    className={cn(
+                      "p-3 rounded-lg border text-sm",
+                      o.tone === "error"
+                        ? "bg-red-500/10 border-red-500/30 text-red-200"
+                        : o.tone === "warning"
+                          ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                          : "bg-success/10 border-success/30 text-foreground"
+                    )}
+                  >
+                    <div className="font-mono text-xs text-foreground">
+                      {o.email} · {o.scopeItemName}
+                    </div>
+                    <div>{o.message}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={resetFlow} className="border-border text-foreground hover:bg-white/5">
                 Create another RFP
