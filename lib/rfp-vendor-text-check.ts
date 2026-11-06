@@ -19,13 +19,16 @@
  *  2. Money and percentages: currency amounts ($250,000, EUR 40k, 1.2m USD), numbers with a k / m / M
  *     / bn suffix (250k, 1.5M, 2bn), numbers followed by "thousand", "million" or "billion", and
  *     percentages (12%, 12 percent). Flagged ALWAYS in text every vendor shares (scope "shared":
- *     overview, objectives, project name, timeline), because a programme total or a fee is never one
+ *     overview, objectives, project name, timeline, and from G4 budget category names and notes and the
+ *     requirements notes), because a programme total or a fee is never one
  *     vendor's released figure; in a line's own text (scope "line") ONLY when that line's budget is
  *     not released.
  *  Deliberately NOT flagged: "35mm" / "500ml" (a unit, not a suffix), 2K / 4K / 6K / 8K in capitals
  *  with no currency sign (video resolutions), a bare number with no currency or suffix, and a number
  *  inside a word.
  */
+
+import { INSURANCE_KEYS, INSURANCE_LABELS, type InsuranceKey } from "@/lib/business-criteria"
 
 export type VendorTextScope = "shared" | "line"
 
@@ -38,6 +41,8 @@ export type VendorTextField = {
   scope: VendorTextScope
   /** Only for scope "line": true when this line's budget is released to its vendors (D2). */
   lineBudgetReleased?: boolean
+  /** The field's purpose is a figure (an insurance minimum, G4): only the client rule applies. */
+  figuresExpected?: boolean
 }
 
 export type VendorTextReason = "client_name" | "figure"
@@ -193,7 +198,7 @@ export function checkVendorText(input: VendorTextCheckInput): VendorTextMatch[] 
     for (const s of collectSpans(text, clientPatterns)) {
       matches.push({ field: f.field, label: f.label, reason: "client_name", matched: s.matched, excerpt: excerptAround(text, s.start, s.end) })
     }
-    const figuresApply = f.scope === "shared" || f.lineBudgetReleased !== true
+    const figuresApply = f.figuresExpected !== true && (f.scope === "shared" || f.lineBudgetReleased !== true)
     if (!figuresApply) continue
     for (const s of collectSpans(text, FIGURE_PATTERNS, (span) => isVideoResolution(span.matched, text, span.start))) {
       matches.push({ field: f.field, label: f.label, reason: "figure", matched: s.matched, excerpt: excerptAround(text, s.start, s.end) })
@@ -232,6 +237,83 @@ export function sharedVendorTextFields(master: Record<string, unknown> | null | 
   })
   fields.push({ field: "timeline", label: "Timeline", text: asText(master.timeline), scope: "shared" })
   return fields
+}
+
+/**
+ * G4 (2026-10-16): the free text inside the two other allow-listed keys every vendor reads
+ * (lib/rfp-vendor-copy.ts), as shared fields.
+ *   budget_categories           each category's name and note (BudgetCategory, lib/budget-categories.ts)
+ *   business_criteria_required  notes, and each insurance row's minimum (BusinessCriteriaRequired,
+ *                               lib/business-criteria.ts); designations and booleans are not text.
+ * An insurance minimum IS a figure ("$1M/$2M" is the requirement itself, not a budget), so only the
+ * client rule applies to it (figuresExpected). Takes the stored values as they are: a JSON string, a
+ * null or a malformed entry gives no fields, never an error.
+ */
+export function criteriaAndCategoryVendorTextFields(source: {
+  budget_categories?: unknown
+  business_criteria_required?: unknown
+} | null | undefined): VendorTextField[] {
+  if (!source) return []
+  const fields: VendorTextField[] = []
+  const categories = parseJsonish(source.budget_categories)
+  if (Array.isArray(categories)) {
+    categories.forEach((entry, i) => {
+      if (!entry || typeof entry !== "object") return
+      const c = entry as Record<string, unknown>
+      const key = asText(c.key).trim() || `#${i}`
+      const name = asText(c.name)
+      const title = name.trim() || `Budget category ${i + 1}`
+      fields.push(
+        { field: `budget_categories.${key}.name`, label: "Budget category name", text: name, scope: "shared" },
+        { field: `budget_categories.${key}.note`, label: `${title}: budget category note`, text: asText(c.note), scope: "shared" }
+      )
+    })
+  }
+  const criteria = parseJsonish(source.business_criteria_required)
+  if (criteria && typeof criteria === "object" && !Array.isArray(criteria)) {
+    const c = criteria as Record<string, unknown>
+    fields.push({ field: "business_criteria_required.notes", label: "Requirements: notes", text: asText(c.notes), scope: "shared" })
+    const insurance = c.insurance && typeof c.insurance === "object" ? (c.insurance as Record<string, unknown>) : {}
+    for (const key of INSURANCE_KEYS) {
+      const row = insurance[key]
+      if (!row || typeof row !== "object") continue
+      fields.push({
+        field: `business_criteria_required.insurance.${key}.minimum`,
+        label: `Requirements: ${INSURANCE_LABELS[key]} minimum`,
+        text: asText((row as Record<string, unknown>).minimum),
+        scope: "shared",
+        figuresExpected: true,
+      })
+    }
+  }
+  return fields
+}
+
+export type CriteriaOrCategoryField =
+  | { kind: "category"; key: string; part: "name" | "note" }
+  | { kind: "criteria_notes" }
+  | { kind: "insurance_minimum"; key: InsuranceKey }
+
+/** Reads back a field id criteriaAndCategoryVendorTextFields built, so a page can apply a rewrite to it. */
+export function parseCriteriaOrCategoryField(field: string): CriteriaOrCategoryField | null {
+  if (field === "business_criteria_required.notes") return { kind: "criteria_notes" }
+  const insurance = /^business_criteria_required\.insurance\.([a-z_]+)\.minimum$/.exec(field)
+  if (insurance) {
+    const key = INSURANCE_KEYS.find((k) => k === insurance[1])
+    return key ? { kind: "insurance_minimum", key } : null
+  }
+  const category = /^budget_categories\.(.+)\.(name|note)$/.exec(field)
+  if (category) return { kind: "category", key: category[1], part: category[2] as "name" | "note" }
+  return null
+}
+
+function parseJsonish(v: unknown): unknown {
+  if (typeof v !== "string") return v
+  try {
+    return JSON.parse(v)
+  } catch {
+    return null
+  }
 }
 
 /** One line's own vendor-visible text: its name, description and timeline. */

@@ -6,8 +6,10 @@ import assert from "node:assert/strict"
 import {
   checkVendorText,
   clientNamePattern,
+  criteriaAndCategoryVendorTextFields,
   diffWords,
   lineVendorTextFields,
+  parseCriteriaOrCategoryField,
   sharedVendorTextFields,
   summarizeVendorTextMatches,
   type VendorTextField,
@@ -138,6 +140,91 @@ check(
   { namesClient: true, showsFigures: true }
 )
 check("non-string text is skipped", checkVendorText({ clientHidden: true, clientNames: ["Nike"], fields: [{ field: "x", label: "x", text: null, scope: "shared" }] }), [])
+
+// ── G4: budget categories and business criteria ────────────────────────────
+const g4Source = {
+  budget_categories: [
+    { key: "crew", name: "Crew", note: "Nike asked for a union crew. Cap is $50,000.", origin: "custom", is_additional_items: false, sort_order: 0 },
+    { key: "post", name: "Post for Nike", note: null, origin: "custom", is_additional_items: false, sort_order: 1 },
+    { key: "additional_items", name: "Additional items", note: "Leave at 0 if there is nothing to add.", origin: "custom", is_additional_items: true, sort_order: 2 },
+  ],
+  business_criteria_required: {
+    designations: { wbe: true },
+    insurance: { general_liability: { required: true, minimum: "$1M/$2M" }, cyber_liability: { required: true, minimum: "Nike standard" } },
+    notes: "Nike procurement requires net 60 and a 5% retainage.",
+  },
+}
+const g4Fields = criteriaAndCategoryVendorTextFields(g4Source)
+const g4 = (hidden: boolean) =>
+  checkVendorText({ clientHidden: hidden, clientNames: ["Nike"], fields: g4Fields }).map((m) => `${m.field}|${m.reason}:${m.matched}`)
+check(
+  "G4 fields: every free-text part, in order",
+  g4Fields.map((f) => f.field),
+  [
+    "budget_categories.crew.name",
+    "budget_categories.crew.note",
+    "budget_categories.post.name",
+    "budget_categories.post.note",
+    "budget_categories.additional_items.name",
+    "budget_categories.additional_items.note",
+    "business_criteria_required.notes",
+    "business_criteria_required.insurance.general_liability.minimum",
+    "business_criteria_required.insurance.cyber_liability.minimum",
+  ]
+)
+check("G4 fields are shared text", g4Fields.every((f) => f.scope === "shared"), true)
+check("G4 note label names its category", g4Fields[1].label, "Crew: budget category note")
+check("G4 while hidden: client and figures", g4(true), [
+  "budget_categories.crew.note|client_name:Nike",
+  "budget_categories.crew.note|figure:$50,000",
+  "budget_categories.post.name|client_name:Nike",
+  "business_criteria_required.notes|client_name:Nike",
+  "business_criteria_required.notes|figure:5%",
+  "business_criteria_required.insurance.cyber_liability.minimum|client_name:Nike",
+])
+check("G4 while shown: figures only", g4(false), [
+  "budget_categories.crew.note|figure:$50,000",
+  "business_criteria_required.notes|figure:5%",
+])
+check("G4: an insurance minimum is a figure by design, not flagged", g4(true).some((m) => m.includes("general_liability")), false)
+check("G4: the additional-items default note is clean", g4(true).some((m) => m.includes("additional_items")), false)
+check(
+  "G4: stored as JSON strings",
+  criteriaAndCategoryVendorTextFields({
+    budget_categories: JSON.stringify(g4Source.budget_categories),
+    business_criteria_required: JSON.stringify(g4Source.business_criteria_required),
+  }).map((f) => f.field),
+  g4Fields.map((f) => f.field)
+)
+check("G4: null source", criteriaAndCategoryVendorTextFields(null), [])
+check("G4: malformed values give no fields", criteriaAndCategoryVendorTextFields({ budget_categories: "not json", business_criteria_required: [1, 2] }), [])
+check(
+  "G4: entry with no key uses its position",
+  criteriaAndCategoryVendorTextFields({ budget_categories: [null, { name: "Music", note: "10% of total" }] }).map((f) => f.field),
+  ["budget_categories.#1.name", "budget_categories.#1.note"]
+)
+check(
+  "G4: summary flags from criteria notes alone",
+  summarizeVendorTextMatches(
+    checkVendorText({
+      clientHidden: true,
+      clientNames: ["Nike"],
+      fields: criteriaAndCategoryVendorTextFields({ business_criteria_required: { notes: "Pay terms 2%" } }),
+    })
+  ),
+  { namesClient: false, showsFigures: true }
+)
+check("G4 parse: category note", parseCriteriaOrCategoryField("budget_categories.crew.note"), { kind: "category", key: "crew", part: "note" })
+check("G4 parse: category name", parseCriteriaOrCategoryField("budget_categories.cat_x1.name"), { kind: "category", key: "cat_x1", part: "name" })
+check("G4 parse: criteria notes", parseCriteriaOrCategoryField("business_criteria_required.notes"), { kind: "criteria_notes" })
+check(
+  "G4 parse: insurance minimum",
+  parseCriteriaOrCategoryField("business_criteria_required.insurance.workers_comp.minimum"),
+  { kind: "insurance_minimum", key: "workers_comp" }
+)
+check("G4 parse: unknown insurance key", parseCriteriaOrCategoryField("business_criteria_required.insurance.pets.minimum"), null)
+check("G4 parse: other ids are not G4", parseCriteriaOrCategoryField("overview"), null)
+check("G4 parse: round trip of every built id", g4Fields.every((f) => parseCriteriaOrCategoryField(f.field) !== null), true)
 
 // ── Word diff ───────────────────────────────────────────────────────────────
 check("diff: unchanged", diffWords("a b", "a b"), [{ kind: "same", text: "a b" }])
