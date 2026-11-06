@@ -1,5 +1,22 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-11-06 (feat/121-vendor-write-guards). 121 IS AUTHORED, NOT APPLIED; its pre-apply test
+> has not been run. NEXT FREE MIGRATION NUMBER: 121 until it is applied, then 122.**
+> `121_vendor_write_guards.sql` (`COMMIT;` at line 503), its down file and its pre-apply test (68
+> assertions, none INCONCLUSIVE by design) do two things:
+> - add `partner_rfp_responses_vendor_write_guard`, BEFORE INSERT OR UPDATE, for vendor sessions only
+>   (118's definition). It has a deny-by-default content allow-list. Link columns, `submitted_at` and
+>   `created_at` are fixed; agency feedback and the 069 timestamps are refused. Status follows owner
+>   ruling S1 = B + C: the agency's shortlisted and meeting_requested are kept, changes requested
+>   (`under_review`) moves to submitted only on a resubmission, and awarded and declined refuse vendor
+>   edits;
+> - extend 114's WITH CHECK on "Agencies manage own delivery reviews" (ruling b): a bid of the same lead
+>   organization and the partnership's vendor, and an assignment on the same project and partnership.
+>
+> Ruling M1 = (i): the summary-pending path stays in the app. The policy count stays 161. **V1 stays
+> open in production until 121 is applied.** The actuals feeder is now **122 or later**. Report:
+> `docs/121-vendor-write-guards-report.md`.
+
 > **UPDATED 2026-10-15 (owner; recorded on feat/rfp-client-ux). MIGRATIONS 071-120 ARE APPLIED AND
 > VERIFIED. NEXT FREE MIGRATION NUMBER: 121.** Read the dated section "2026-10-15 ... leak #8 closed at
 > the field level" at the end of this file: 120 and the Lightning budget data fix applied, owner rulings

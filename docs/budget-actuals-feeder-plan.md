@@ -1,5 +1,10 @@
 # The actuals feeder: receipt and invoice digester (plan only)
 
+> **UPDATED 2026-11-06.** **Migration number: 122 or later.** 121 is the vendor write guards
+> (`supabase/migrations/121_vendor_write_guards.sql`, authored, not applied). Wherever this file says
+> "116" or "121 or later" for the feeder's migration, read "122 or later, the next free number at
+> authoring time".
+
 > **UPDATED 2026-10-14.** **Migration number: 121 or later.** 116 and 117 are the budget line math and
 > line kind migrations (applied 2026-10-14) and the agency-owned RFP record holds 118 to 120; ruling 9
 > below puts the RFP record first. Wherever this file says "116" for the feeder's migration, read "121
@@ -61,7 +66,7 @@ is not the accounting ledger of record.
    DEFAULT 'file' CHECK (kind IN ('file','manual'))` and `blob_path` nullable only for `manual`.
    Migrate existing placeholder rows by prefix.
 
-## 4. Migration sketch (not authored; 121 or later, written as "116" before 2026-10-14)
+## 4. Migration sketch (not authored; 122 or later since 2026-11-06, "121 or later" before that, written as "116" before 2026-10-14)
 
 ```sql
 BEGIN;
@@ -152,7 +157,7 @@ exception:**
 7. The `'manual'` `source_documents` kind is accepted.
 8. New files use the new org-prefixed storage path; existing `budget/<projectId>/` rows are
    grandfathered (not moved).
-9. The RFP record ships before the feeder (RFP record 118-120 first; the feeder is 121 or later).
+9. The RFP record ships before the feeder (RFP record 118-120 first; the feeder is 122 or later, since 121 is the vendor write guards).
 
 The questions as they were put to the owner:
 

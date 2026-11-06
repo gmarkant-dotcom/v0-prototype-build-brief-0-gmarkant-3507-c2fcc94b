@@ -1,5 +1,22 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-11-06 (feat/121-vendor-write-guards). THIS BANNER SUPERSEDES THE ONES BELOW.**
+> **Migrations 071-120 are applied. 121 is AUTHORED, NOT APPLIED; its pre-apply test has not been run.
+> Next free number: 121 until it is applied, then 122.**
+> - **121 closes V1**, which is open in production: the vendor's whole-row UPDATE on
+>   `partner_rfp_responses` (079:1414-1416). It adds a vendor-session guard (deny by default; ruling
+>   S1 on status) and ruling (b) on the delivery review check. 161 policies stay 161.
+> - Owner rulings 2026-11-06: **S1 = B + C**, **M1 = (i)**, **Reviews = (b)**.
+> - The S1 code (vendor page autosave, vendor route, guest route) ships with it and works before and
+>   after 121.
+> - Report: `docs/121-vendor-write-guards-report.md`. Test script: `docs/rfp-record-test-script.md`
+>   part P.
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **121**: merge `main` into the branch, deploy, run the inventory query, then the pre-apply test
+>    (68 assertions), the dry run and the apply.
+> 2. **The actuals feeder**, migration **122 or later** (renumbered from "121 or later").
+
 > **UPDATED 2026-10-15 (owner; recorded on feat/rfp-client-ux). THIS BANNER SUPERSEDES THE ONES BELOW.**
 > **Migrations 071-120 are applied and verified. Next free number: 121.** Step C merged at `bb91c4c`;
 > 120 pre-apply 29/29 PASS, dry run and rollback proven, applied (4 functions invoker and pinned, 2 guard

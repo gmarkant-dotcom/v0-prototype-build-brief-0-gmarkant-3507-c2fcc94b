@@ -1,9 +1,16 @@
-# 121 vendor write guards: STEP 0 report. STOPPED BEFORE BUILD.
+# 121 vendor write guards: report
 
-Branch `feat/121-vendor-write-guards`, from `main` at `6e66fca`. Authored 2026-11-06, unattended run.
-**No migration 121 was written. Nothing was pushed, merged, applied or run against a database.**
-The only other file this run adds is the read-only query
-`supabase/sql-checks/121-vendor-write-inventory.sql` (step 0 d).
+Branch `feat/121-vendor-write-guards`. Authored 2026-11-06, two unattended runs.
+
+**STATUS (run 2, 2026-11-06): 121 AUTHORED, NOT APPLIED, ITS PRE-APPLY TEST NOT RUN.** The owner ruled
+S1 = B + C, M1 = (i) and Reviews = (b) on 2026-11-06. Step 0 round 2 (section 10) found no stop
+condition. Built: migration 121, its down file and pre-apply test (sections 12-14), and the S1 code in
+the vendor page, vendor route, guest route and agency delivery-review route (section 15). Nothing was
+pushed, merged, applied or run against a database. A header line that says "NOT MERGED" or "NOT
+APPLIED" is not updated when that changes: check `git merge-base` and the catalog.
+
+Sections 1-9 are run 1 (from `main` at `6e66fca`, stopped at step 0). They are kept as written.
+Section 3's "S1" and the `under_review` row there are corrected by section 10.
 
 ## 1. Outcome
 
@@ -362,3 +369,332 @@ organization before and after the write.
   - The column list is complete from the repository. A column added out of band would be refused for
     vendors by a deny-by-default guard anyway.
 - **Refused:** none.
+
+---
+
+# Run 2 (2026-11-06): owner rulings, step 0 round 2, build
+
+**Owner rulings, 2026-11-06.**
+- **S1 = B + C.** A vendor's edit never changes a status the agency set. From draft or submitted, the
+  vendor moves only between those two. From an agency-set changes-requested status, a resubmission moves
+  the bid to submitted. From shortlisted, meeting_requested or another agency-set in-progress status,
+  the content edit is accepted and the status is kept. Once a bid is final, vendor updates are refused.
+  A vendor never sets an agency-set or final status.
+- **M1 = (i).** The service-role summary-pending path stays in both routes; no SECURITY DEFINER.
+- **Reviews = (b).** Section 7's (b); no engagement requirement.
+
+**What the code was read at.** The branch head `84fa064` is behind `main` (`49b38a6`: F7, F8 and CV1). I
+attempted `git merge main` into the feature branch, and the session's permissions refused it, so the
+branch was not synced (assumption A1, section 17). Files `main` did not change were read on the branch.
+`app/api/rfp/guest/[token]/route.ts` and `lib/guest-bid-row.ts` were read on `main` with `git show` and
+`git grep`. Lines marked "(main)" are `49b38a6`; unmarked lines are the branch before this run's edits.
+
+## 10. Step 0 round 2 (read only)
+
+### (a) The status vocabulary, every writer, every transition
+
+**Vocabulary: seven values.** `partner_rfp_responses_status_check` is `submitted, under_review,
+shortlisted, meeting_requested, awarded, declined, draft` (`scripts/019-bid-status-meeting-requested.sql:6-8`).
+The column is `NOT NULL DEFAULT 'draft'` (`scripts/014-partner-rfp-responses.sql:15`). No migration from
+071 to 120 touches the constraint (grep for `partner_rfp_responses_status_check` and `ALTER TABLE ...
+partner_rfp_responses`).
+
+`lib/bid-status.ts:1-17` lists more values, but they are not response values:
+- `new`, `viewed`, `bid_submitted`, `feedback_received` and `revision_submitted` belong to
+  `partner_rfp_inbox` (`scripts/019:16-26`);
+- `closed` and `not_selected` are inbox-only (`lib/bid-status.ts:14-17`, 099).
+
+**`under_review` is the agency's "Changes Requested".** The vendor's label is "Changes Requested"
+(`lib/bid-status.ts:48-49`, `lib/bid-shared.ts:108` and `:126`, `components/partner-rfp-surface.tsx:77`
+and `:91`). The agency's label is "Under Review" (`lib/bid-status.ts:75-76`). **This corrects run 1:** R9's
+note "no route writes under_review" (`supabase/sql-checks/121-vendor-write-inventory.sql:30`, `:136`) is
+wrong. The agency PATCH accepts it, and the agency UI sends it (below).
+
+| Writer | Where | Status it writes |
+|---|---|---|
+| Vendor page | `app/partner/rfps/[id]/page.tsx:934` `save(status)`; payload `:1055` `status`; autosave `:1169` `save("draft")`; buttons `:2498`, `:2619` draft and `:2516`, `:2631` submitted; local state after a submit `:1133-1134` sets `submitted` | `draft` (autosave and Save draft), `submitted` |
+| Vendor route | `app/api/partner/rfps/[id]/response/route.ts:225` (absent or anything else becomes `draft`); row `:319`; update `:348`, insert `:363`; refuses only inbox closure statuses `:190`; on a submit, inbox `bid_submitted` `:380-384` | `draft` or `submitted`, over whatever is stored |
+| Guest route (service role) | edit `app/api/rfp/guest/[token]/route.ts:650` (main), through `lib/guest-bid-row.ts:49` (main) `status: "submitted"`; first submit `:756` (main). Branch copy: `:642`, `:757` | `submitted`, over whatever is stored |
+| Agency route | `app/api/agency/rfp-responses/[id]/route.ts:218` `ALLOWED_STATUS` (submitted, under_review, shortlisted, meeting_requested, awarded, declined); `:276-283` feedback on a submitted bid moves it to `under_review`; `:287-289` awarded cannot move; patch `:350-356`; 069 stamps `:361-369`; write `:809` | any of the six; never out of awarded |
+| Agency UI | `components/bid-detail-sheet.tsx:331` meeting_requested to and from under_review; `:359` shortlisted to and from under_review; `:391` declined; `:402` "Undo decline" to submitted; `:812` under_review when feedback is sent on a submitted bid; `:934` awarded. `components/bid-compare-view.tsx:382` shortlisted to and from under_review; `:392` declined; `:789` awarded | through the agency route |
+| Trusted path | `lib/magic-token-attach.ts:137`, `:217`; agency backfills `app/api/agency/rfp-responses/[id]/route.ts:479`, `:710` | none (link columns only) |
+
+**Transitions.**
+- The vendor goes draft to submitted, and submitted to draft (an explicit Save draft, or the autosave).
+- The guest always goes to submitted.
+- The agency moves among submitted, under_review, shortlisted, meeting_requested, awarded and declined.
+  Awarded is terminal (`:287`). Declined is reopened by "Undo decline" (`bid-detail-sheet.tsx:402`).
+- Un-shortlisting, and un-requesting a meeting, both land on under_review (`:359`, `:331`, `bid-compare-view.tsx:382`).
+
+**Placement in the S1 groups.** Every value is placed, so stop condition **S1' does not apply**.
+
+| S1 group | Statuses |
+|---|---|
+| Vendor cycle | draft, submitted |
+| Agency asked for changes | under_review |
+| Agency in progress | shortlisted, meeting_requested |
+| Final | awarded, declined |
+
+Declined is final for the vendor. The agency's "Undo decline" returns it to submitted, in the vendor's
+cycle. A status outside the seven cannot be stored, and 121's pre-flight refuses to run if the
+constraint ever names another.
+
+### (b) The vendor-owned allow-list against the current code
+
+- **Vendor route row** (`route.ts:311-324`): `proposal_text, budget_proposal, timeline_proposal,
+  terms_disclosure, attachments, business_criteria_responses, partner_display_name, status, updated_at`,
+  plus `business_criteria_acknowledgments`, `budget_lines` and `proposal_sections` when sent.
+  - Its insert adds `inbox_item_id`, `vendor_org_id` and `lead_org_id` (`:326-331`), which 079's INSERT
+    policy ties to the caller's inbox row (079:1389-1404).
+- **Guest route on main**: `lib/guest-bid-row.ts:41-55` (main) builds the same content keys plus `status`
+  and `updated_at`. The F8 fix (`7426b47`) adds `proposal_sections` to the first submit.
+  - The edit adds `submitted_at` (`route.ts:651`, main).
+  - The insert adds `lead_org_id`, `vendor_org_id`, `inbox_item_id: null` and `partner_display_name`
+    (`:749-756`, main).
+  - It writes on the service role, the trusted path. `lib/guest-bid-row.ts:15-21` (main) names
+    agency-owned columns the builder never writes.
+- **`payment_terms`**: no writer in the code today; it is read only (`lib/bid-analysis-context.ts:55`,
+  `app/api/agency/payment-synthesis/route.ts:117`, guest GET `:276`). It stays on the list as the
+  vendor's own legacy content (assumption A4).
+
+**Result: section 3's list holds unchanged.** It is in section 13.
+
+### (c) Every place a vendor or guest path sends status, and what S1 says it should send
+
+| Place | Today | Under S1 (built, section 15) |
+|---|---|---|
+| Vendor page autosave, `page.tsx:1169` | `status: "draft"`: a shortlisted bid is demoted within 2 s | **no status**: content only, status kept |
+| Vendor page Save draft, `:2498`, `:2619` | `draft` | `draft`. The route keeps an agency status; a submitted bid may go back to draft (the vendor's own cycle) |
+| Vendor page Submit, `:2516`, `:2631` | `submitted` | `submitted`. The route moves draft, submitted and under_review to submitted, keeps shortlisted and meeting_requested, and refuses awarded and declined |
+| Vendor page local state, `:1133-1134` | assumes `submitted` | shows the status the server saved |
+| Vendor route, `route.ts:225`, `:319` | writes the request over the stored status | decides against the stored status (`lib/vendor-bid-status.ts`) |
+| Vendor route inbox update, `:380-384` | `bid_submitted` on every submit | only when the bid is now submitted; otherwise the inbox keeps the agency's status |
+| Guest edit, `route.ts:650` (main) | `submitted` | `submitted` from draft, submitted or under_review; the agency's status kept from shortlisted or meeting_requested; 409 from awarded or declined |
+| Guest first submit, `:756` (main) | `submitted` | `submitted` (a new row; allowed) |
+
+**Stop conditions: none.** S1' does not apply: every status is placed. S2 does not apply: no legitimate
+writer is blocked. The only blockable writers are the vendor and guest routes, which are not on the
+do-not-edit list and were changed.
+
+## 11. The status rule as built, per transition
+
+The vendor-session guard (migration 121) and `lib/vendor-bid-status.ts` (vendor and guest routes)
+apply the same rule. "Request" is the status the vendor sends; "none" is a save with no status.
+
+| Stored | Request none | Request draft | Request submitted | Request any other status |
+|---|---|---|---|---|
+| (no row, insert) | draft | draft | submitted | **refused** (42501 in the database) |
+| draft | draft | draft | submitted | **refused** |
+| submitted | submitted | draft | submitted | **refused** |
+| under_review | under_review (kept) | under_review (kept) | **submitted** | **refused** |
+| shortlisted | shortlisted (kept) | shortlisted (kept) | shortlisted (kept) | **refused** |
+| meeting_requested | meeting_requested (kept) | meeting_requested (kept) | meeting_requested (kept) | **refused** |
+| awarded, declined, anything else | **refused** | **refused** | **refused** | **refused** |
+
+Where the rule keeps the status, the database guard writes `OLD.status` back and does not raise. In the
+app this is "a request the vendor cannot make". A refusal in the app is 409 `{"error": "This bid has been
+awarded, so it can no longer be edited.", "code": "bid_final"}` (or "declined"). In the database it is
+42501 "This bid is awarded, so it can no longer be edited.". Agency, service-role and trusted-path
+writes are not touched.
+
+## 12. Migration 121
+
+| File | Lines |
+|---|---|
+| `supabase/migrations/121_vendor_write_guards.sql` | `BEGIN;` line 150; `-- >>> 121 BODY START` line 151; `-- <<< 121 BODY END` line 502; **`COMMIT;` line 503**, the only `COMMIT;` line |
+| `supabase/migrations/121_preapply_test.sql` | `-- >>> 121 BODY START` line 568; `-- <<< 121 BODY END` line 919 |
+| `supabase/migrations/121_vendor_write_guards_down.sql` | `BEGIN;` line 26; `COMMIT;` line 68 |
+
+The two marked bodies are byte-identical. `cmp` from the START markers reports the first difference at
+byte 21290 (line 353), one byte past the END marker's newline. No TEMP table.
+
+- **Pre-flight LG121**, fail-closed inside the transaction. It requires:
+  - the trusted path;
+  - 120 applied (`rfp_vendor_copy_keys()` and both vendor-copy guards, enabled);
+  - `current_user_org_ids()`;
+  - 161 public policies;
+  - exactly 079's six policies on `partner_rfp_responses`, with the vendor UPDATE policy still having no
+    WITH CHECK, and exactly two on `delivery_reviews`, carrying 114's check;
+  - no trigger on `partner_rfp_responses` other than 110's (and 121's own, on a re-run);
+  - exactly the 28 classified columns;
+  - the status constraint naming exactly the seven values;
+  - the review-check columns present;
+  - no existing review that already breaks the new check (inventory D4-D6, listed if any).
+
+  Any unexpected policy, trigger or column aborts the run.
+- **Function** `public.partner_rfp_responses_vendor_write_guard()`: SECURITY INVOKER, `SET search_path =
+  public, pg_temp`, EXECUTE revoked from PUBLIC, anon and authenticated. Its trigger is BEFORE INSERT OR
+  UPDATE FOR EACH ROW (tgtype 23).
+- **Review policy:** one `ALTER POLICY ... WITH CHECK` on "Agencies manage own delivery reviews". USING is
+  untouched.
+- **Policy count: 161 before, 161 after.** No policy is created or dropped; the post-check aborts if the
+  count moves. No grant changes, apart from the new function's own REVOKEs.
+- **Idempotent:** a re-run says "121 already applied".
+- **Down:** drops the trigger and the function, and restores 114:148-157's WITH CHECK verbatim.
+
+## 13. The final allow-list (vendor sessions)
+
+- **May change** (UPDATE) or set (INSERT):
+  - `proposal_text`, `budget_proposal`, `timeline_proposal`;
+  - `attachments`, `payment_terms`, `terms_disclosure`;
+  - `business_criteria_responses`, `business_criteria_acknowledgments`;
+  - `budget_lines`, `proposal_sections`;
+  - `partner_display_name`, `updated_at`;
+  - `status` (section 11).
+- **Set on INSERT only, never changed by a vendor:** `id`, `inbox_item_id`, `vendor_org_id`,
+  `lead_org_id`. The 079 INSERT policy ties the last three to the caller's inbox row.
+- **Fixed once inserted, and NULL or default on a vendor insert:** `submitted_at` (NULL), `created_at`
+  (must equal the default, `now()`).
+- **Agency-owned, NULL on a vendor insert, never changed by a vendor:** `agency_feedback`,
+  `feedback_updated_at`, `shortlisted_at`, `declined_at`, `meeting_requested_at`.
+- **NULL for everyone (110):** `ai_summary_short`, `ai_summary_detailed`, `ai_summary_generated_at`,
+  `composite_score`.
+- **Any column added later** is refused for vendors: deny by default.
+
+## 14. The review rule (ruling b) and the pre-apply test
+
+**WITH CHECK of "Agencies manage own delivery reviews"** (INSERT and UPDATE). It keeps 114 and adds two
+conditions:
+1. (114) `org_id` is one of the caller's organizations.
+2. (114) The partnership's `lead_org_id = org_id`.
+3. (114) The project's `org_id = org_id`.
+4. (new) `response_id` is NULL, or a bid with `lead_org_id = org_id` and `vendor_org_id` equal to the
+   partnership's `vendor_org_id`. A guest bid that has no vendor yet does not qualify.
+5. (new) `assignment_id` is NULL, or a `project_assignments` row with the same `project_id` and
+   `partnership_id`.
+
+There is no engagement requirement.
+- The agency route already sends only the awarded bid of that vendor (`awardedResponseId` comes from
+  `responsesForAssignment`, `app/api/agency/active-engagements/route.ts:63-78`, which requires
+  `vendor_org_id === partnerId`).
+- It also sends only the (project, partnership) assignment (`app/api/agency/delivery-reviews/route.ts:173-178`).
+
+So no legitimate write is blocked. The route now also drops a mismatched bid to NULL (section 15).
+
+**Pre-apply test** (`121_preapply_test.sql`, not run).
+- **Shape:** phases BEFORE and AFTER, with an isolation fingerprint (every bid and review row; the
+  inbox, assignment and project ids) after each scenario.
+- **Subjects** are chosen through `partnerships.vendor_org_id`, and `tgenabled` is cast to text.
+- **Expected count: 68 assertions** = 60 scenarios + 7 self-checks + M.
+- **INCONCLUSIVE by design: none.** A missing subject reads NO SUBJECT and "DO NOT APPLY 121 YET."
+- **NOT DISCRIMINATING by design** (25 rows, same expectation in both phases): B1-B4, B6, B9, I1, I2, I9,
+  A1-A6, G1, G2, N1-N4, R1, R2, R9, R10.
+
+**Discriminating scenarios** (35). Each is accepted before 121 and has a different answer after:
+| Group | Scenarios | After 121 |
+|---|---|---|
+| Kept status | B5, B7, B8 (shortlisted, meeting_requested), B10 (under_review) | the status is kept, not demoted |
+| Status sets | T1-T6 | refused |
+| Link columns and stamps | L1-L5 | refused |
+| Agency-owned columns | F1-F5 | refused |
+| Final bids | Z1-Z3 | refused |
+| Inserts | I3-I8 | refused |
+| Reviews | R3-R8 | refused |
+
+**Self-checks** (S1-S7):
+- S1: the public policy count is 161 before and after.
+- S2: no other policy changed.
+- S3: the review policy keeps ALL, its roles and its USING, and its check names the new conditions.
+- S4: no grant changed outside the new function.
+- S5: the function is invoker and pinned, and anon, authenticated and PUBLIC cannot execute it.
+- S6: the trigger is enabled with tgtype 23, and every other trigger on both tables is unchanged.
+- S7: the migration writes no bid or review row.
+
+## 15. Code changes (file:line, after this run)
+
+- `lib/vendor-bid-status.ts` (new): `resolveVendorBidStatus(current, requested)` is the S1 table above;
+  `finalBidMessage()` gives the copy. `lib/vendor-bid-status.test.ts` (new) has **34 assertions,
+  passing** (`npx tsx lib/vendor-bid-status.test.ts`).
+- `app/api/partner/rfps/[id]/response/route.ts`:
+  - `:230-232` the request: absent means "content only";
+  - `:332-352` reads the stored status, refuses a final bid with 409 `bid_final` (`:349`), and writes
+    the S1 status (`:351-352`, `:358`, `:371`);
+  - `:404` the inbox goes to `bid_submitted` only when the bid is now submitted;
+  - `:643` logs `savedStatus`.
+  - A resubmission still writes the version row, marks the summary pending through the service role
+    (M1 (i), unchanged) and notifies the agency, whatever status is kept.
+- `app/partner/rfps/[id]/page.tsx`:
+  - `:934-937` `save()` takes `keepStatus`;
+  - `:1060` the payload omits `status` when it is set;
+  - `:1177` the autosave sets it;
+  - `:1140-1142` after a submit the page shows the saved status, and updates the inbox to
+    `bid_submitted` only when the bid is submitted.
+- `app/api/rfp/guest/[token]/route.ts`:
+  - `:3` the import;
+  - `:568-589` reads the bid's status on an edit and refuses awarded or declined with 409 `bid_final`;
+  - `:676` writes the S1 status (`{ ...editRow, status: guestEditStatus }`).
+  - These edits sit outside the lines `main`'s F8 changed (the import block at `:17`, and the edit row
+    at `:633-649`), so a merge is expected to be clean. **Not verified:** `git merge-tree` was refused by
+    the session's permissions.
+- `app/api/agency/delivery-reviews/route.ts`:
+  - `:168` the partnership read takes `vendor_org_id`;
+  - `:180-195` a `response_id` is kept only when it is the partnership vendor's bid, as an unowned bid
+    always was.
+
+**Gates.**
+- `npx tsc --noEmit`: exit 0.
+- `pnpm lint` (JSON, filtered to touched files): 0 new findings. Pre-existing, on lines this run did not
+  change: page.tsx 3 errors at `:646`, `:774`, `:812` (`react-hooks/set-state-in-effect`), and a warning
+  at response route `:361` (the unused `eslint-disable` above `let saved: any`).
+- No migration numbered 120 or below, no `supabase/data-fixes` file and no do-not-edit file was edited.
+
+## 16. Security review list (file:line)
+
+1. `supabase/migrations/121_vendor_write_guards.sql:324-431`, the guard.
+   - The vendor-session test (`:342`, `:347-350`) is 118's.
+   - The INSERT checks are at `:353-374`.
+   - The final-status refusal is at `:377-381`, the status-set refusal at `:384-388`, and the
+     deny-by-default diff at `:391-401`.
+   - The S1 keep is at `:404-410`.
+   - Review: a member of both the vendor and the lead organization is treated as the agency (118's rule).
+2. `121_vendor_write_guards.sql:439-459`, the review WITH CHECK. It runs under the caller's RLS, so the
+   agency must be able to read the bid, partnership and assignment, which it can (114's note).
+3. `121_vendor_write_guards.sql:155-318`, the pre-flight. It is fail-closed on the policy count, the
+   exact policies, triggers, columns and status vocabulary, and existing reviews.
+4. `app/api/rfp/guest/[token]/route.ts:568-589`, `:676`. The guest path is the service role, so S1 is
+   enforced **only in code** there. A future service-role writer of `partner_rfp_responses.status` must
+   use `lib/vendor-bid-status.ts`.
+5. `app/api/partner/rfps/[id]/response/route.ts:332-352`. The read-then-write is not atomic; the guard
+   is the backstop (it re-applies S1 on the stored row at write time).
+6. `app/api/partner/rfps/[id]/response/route.ts:404`. The inbox status is no longer reset on a
+   resubmission of a shortlisted or meeting-requested bid.
+7. `app/partner/rfps/[id]/page.tsx:1060`, `:1177`. The autosave sends no status.
+8. `app/api/agency/delivery-reviews/route.ts:180-195`, the bid-vendor match (ruling b in code).
+9. Still open (section 6, items 1-10): the other whole-row vendor write policies. 121 does not touch them.
+
+## 17. Refused, assumptions, stopped on, findings
+
+- **Stopped on:** nothing.
+- **Refused:** none by me. The session's permissions refused `git merge main` and `git merge-tree`
+  (A1), and pipes into `sed` or `md5` (so the byte check used `grep -b` and `cmp`).
+- **Assumptions.**
+  - **A1.** The branch was not synced with `main` 49b38a6. My edits to the guest route avoid the lines
+    F8 changed, and `{ ...editRow, status: guestEditStatus }` overrides `buildGuestBidContent`'s
+    `status: "submitted"` after a merge. Merge `main` into this branch, then re-run `tsc`, before review.
+  - **A2.** Live policies, triggers and columns are as on disk. The pre-flight refuses otherwise.
+  - **A3.** `created_at`'s default is `now()` (`scripts/014:16`). A vendor insert that sends any other
+    value is refused.
+  - **A4.** `payment_terms` stays vendor content (no writer today).
+  - **A5.** `status_at_submission` on the version row still records the vendor's act ("submitted"),
+    not the kept status.
+- **Findings for the owner.**
+  - **G1.** Un-shortlisting (`bid-detail-sheet.tsx:359`, `bid-compare-view.tsx:382`) and un-requesting
+    a meeting (`:331`) move a bid to `under_review`, which the vendor reads as "Changes Requested"
+    (`lib/bid-status.ts:49`). Under S1, the vendor's next resubmission of such a bid moves it to
+    submitted. That is the ruling as written, but the label may not be what the agency meant.
+  - **G2.** The agency's "Undo decline" (`bid-detail-sheet.tsx:402`) re-opens a declined bid for vendor
+    edits.
+  - **G3.** The inventory query's R9 note "no route writes under_review" is wrong (section 10 a). The
+    query is read-only and not re-issued.
+  - **G4.** The guest page shows the 409 message as its submit error (`app/rfp/respond/[token]/page.tsx:661`).
+    The vendor page already hides the editor for awarded and declined bids (`page.tsx:1330-1334`).
+
+## 18. What to run (owner)
+
+1. Merge `main` into this branch (A1), then run `npx tsc --noEmit`.
+2. Deploy the code (it works before and after 121).
+3. Run `supabase/sql-checks/121-vendor-write-inventory.sql`; D4-D6 must be 0.
+4. Run 121's P1 to P3, then the pre-apply test: its first line must read "SAFE TO APPLY 121.", with 68
+   assertions.
+5. Do the dry run, then the real run, then V1 to V4.
+6. Then run `docs/rfp-record-test-script.md` part P.

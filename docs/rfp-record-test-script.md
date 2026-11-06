@@ -4,7 +4,8 @@
 a preview or local build of the branch. Parts A to D are step A and 118 (118 is applied and verified,
 2026-10-14). **Parts E to G are step B and 119** (`feat/rfp-record-b`; 119 applied and verified
 2026-10-14). **Parts I to L are step C and 120** (`feat/rfp-record-c`; 120 authored, NOT applied). Step D
-is not built.
+is not built. **Part P is 121, the vendor write guards** (`feat/121-vendor-write-guards`; authored
+2026-11-06, NOT applied).
 **Accounts:** agency `gmarkant@gmail.com` (the paid m a r k a n t lead agency); vendor
 `gmarkant@icloud.com` (April Partner Test Agency); a magic-link address with no account
 (`gmarkant+rfpa1@gmail.com`, lands in the agency inbox).
@@ -388,3 +389,70 @@ record: it may be toggled, but leave it as found at the end (currently client vi
   warning, and their network responses contain no `warnings` or `rfp_records` key.
 - **RM14 Gate.** As the vendor, `fetch('/api/agency/rfp-text/rewrite', {method:'POST', body:'{}'})` in the
   console: 402 (or 401 signed out). Never 200.
+
+## Part P. Vendor write guards: 121 code deployed, then 121 applied (`feat/121-vendor-write-guards`)
+
+**Parts N and O are not on this branch.** Part P is the brief's letter; parts N and O may exist on other
+branches.
+
+**Accounts.** Agency browser: **gmarkant@gmail.com**. Vendor browser (a separate profile):
+**gmarkant@icloud.com**.
+
+**Setup.**
+- Keep DevTools Network open with "Preserve log" on, filtered to `response`.
+- Use one throwaway RFP the vendor has bid on. Its vendor link is
+  `https://withligament.com/partner/rfps/<inbox id>`: open it from `https://withligament.com/partner/rfps`
+  and copy the id from the address bar.
+- The agency opens bids at `https://withligament.com/agency/bids`.
+
+Run RP1-RP9 once after the code deploy and again after 121 is applied. The answers must be the same both
+times.
+
+- **RP1 Shortlist.** Agency, `https://withligament.com/agency/bids`: open the bid, click Shortlist. The
+  status reads "Shortlisted".
+- **RP2 Edit stays shortlisted.** Vendor, `https://withligament.com/partner/rfps/<inbox id>`, Bid tab:
+  change one sentence of the proposal and wait 3 seconds. Autosave shows "Saved".
+  - Network: the POST to `/api/partner/rfps/<inbox id>/response` has **no `status` key** in its body, and
+    its response has `"status":"shortlisted"`.
+  - Reload: the vendor's status reads "Shortlisted".
+  - The agency reloads `https://withligament.com/agency/bids`: still "Shortlisted". (Before this change,
+    it was "Draft" within two seconds.)
+- **RP3 Resubmit stays shortlisted, summary refreshed.** Vendor: submit the revision. The "revision
+  submitted" modal appears, and the response has `"status":"shortlisted"`.
+  - Agency, `https://withligament.com/agency/bids`, reload: the bid still reads "Shortlisted".
+  - Its summary first reads **"Generating summary..."**, then a fresh summary that mentions the new
+    sentence.
+  - The agency's email and in-app notification read as a revision.
+- **RP4 Changes requested, then resubmit.** Agency: un-shortlist the bid. It reads "Under Review"; the
+  vendor sees "Changes Requested". Vendor: edit and wait for autosave. The status stays "Changes
+  Requested". Submit: the vendor reads "Submitted", and the agency, after a reload, reads "Submitted".
+- **RP5 Agency statuses unaffected.** Agency, on the same bid:
+  - Shortlist, Request meeting, send feedback (it saves, the vendor sees the feedback), Decline with a
+    reason, Undo decline.
+  - Each saves and shows the new status after a reload. Every PATCH to `/api/agency/rfp-responses/<id>`
+    answers 200.
+- **RP6 Awarded bid cannot be edited.** Agency: award the bid.
+  - Vendor: reload the vendor link. The page shows "Congratulations! Your bid has been awarded." and no
+    editable form.
+  - In the vendor's DevTools console, run:
+    `fetch('/api/partner/rfps/<inbox id>/response', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({proposal_text:'x', status:'submitted'})}).then(r => r.status)`.
+    It must answer **409**, with body error "This bid has been awarded, so it can no longer be edited.".
+- **RP7 Guest edit.** Use a Lightning invitation to `gmarkant+rfpa1@gmail.com`, opened from its email at
+  `https://withligament.com/rfp/respond/<token>`. Submit once.
+  - Agency: shortlist that bid. Guest: Edit bid, then submit. Agency reload: still "Shortlisted", and the
+    summary regenerates.
+  - Agency: award it. Guest: Edit bid, then submit. The page shows "This bid has been awarded, so it can
+    no longer be edited." and nothing changes.
+- **RP8 After 121 only: direct writes refused.** Vendor console, with the vendor's own Supabase session.
+  Use the browser client the app loads (for example from React DevTools, or a page that exposes
+  `createClient`). Update the vendor's own bid row:
+  - `status` to `awarded`;
+  - `lead_org_id` to any other uuid;
+  - `agency_feedback`;
+  - `shortlisted_at`.
+
+  Each must fail with code `42501`. A `proposal_text` change on a submitted bid succeeds. (Before 121,
+  every one of these succeeded: V1.)
+- **RP9 Delivery review.** Agency: `https://withligament.com/agency/project?projectId=<project id>`. Open
+  the awarded vendor's delivery review, set On time, then Save. It saves (200), and after a reload it
+  shows the saved answer.
