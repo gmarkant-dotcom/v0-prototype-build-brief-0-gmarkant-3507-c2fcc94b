@@ -278,3 +278,14 @@ the agency can accept, edit or ignore. Sending proceeds either way. Flagged:
 
 **Next:** `feat/rfp-client-ux` (B1 fix, B3 move, OV-A at send and on sent RFPs; no migration). Then the
 actuals feeder, migration 121 or later.
+
+## 2026-11-06: four builds merged, migration 121 applied and verified
+
+- Merged to main (all tests passing on the merged code: rfp-vendor-text-check 80, magic-link-resend 45, guest-bid-row 19, agency-invite-request 54, vendor-bid-status 34):
+  - feat/client-visibility-tag: ruling CV1 (read-only client tag with confirm menu in Bid Management; switch only in the send steps), G4 (OV-A covers budget category notes and requirements notes; insurance minimums not flagged as figures, by owner acceptance).
+  - fix/lightning-resend-guest-sections: F7 (Lightning resend updates only renewal fields, no blanking, no new record), F8 (guest bids keep proposal_sections).
+  - fix/invite-blanking-followups: G1 (card form resends instead of blanking), G2 (wizard guest send carries criteria, categories, business criteria, close flag), G3 (clear send and resend outcomes).
+  - feat/121-vendor-write-guards: ruling S1 = B+C in code (vendor and guest edits keep agency-set status; final bids refuse edits; autosave sends no status), delivery-review bid match.
+- Migration 121 (vendor write guards): pre-apply 68/68 PASS, none inconclusive; dry run and rollback proven; applied. Post-apply: guard trigger on partner_rfp_responses present and enabled, SECURITY INVOKER, search_path pinned, no anon EXECUTE; delivery_reviews check adds the bid and assignment match; 19 bids and 2 reviews unchanged; 161 public policies unchanged.
+- Rulings: S1 = B+C, M1 = (i) (summary pending stays on the service-role path), reviews = (b) (no engagement requirement).
+- Open: vendor write pass 2 (ten tables with whole-row vendor write policies, design in docs/vendor-write-pass-2-design.md when complete) proposed as migration 122, which moves the budget actuals feeder to 123 or later (owner to confirm); 121 findings G1 (un-shortlisting shows the vendor "Changes Requested") and G2 (Undo decline reopens a bid to vendor edits) await a ruling; F7 damaged-row repair is an owner decision; browser verification of the four builds pending.
