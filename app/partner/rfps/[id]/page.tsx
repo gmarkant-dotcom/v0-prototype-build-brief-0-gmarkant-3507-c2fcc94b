@@ -931,7 +931,10 @@ export default function PartnerRfpDetailPage() {
   const budgetCategoryTotal = draftGrandTotal(budgetCategories, budgetDraft)
   const budgetCategoryCompleteness = countCategoryCompleteness(budgetCategories, draftEnteredKeys(budgetDraft))
 
-  const save = async (status: "draft" | "submitted", opts?: { silent?: boolean }): Promise<boolean> => {
+  const save = async (
+    status: "draft" | "submitted",
+    opts?: { silent?: boolean; keepStatus?: boolean }
+  ): Promise<boolean> => {
     const silent = opts?.silent === true
     if (!silent) {
       setSubmitError(null)
@@ -1052,7 +1055,9 @@ export default function PartnerRfpDetailPage() {
         // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
         // reason, so requests shaped like today's never carry this key.
         ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
-        status,
+        // 121 (S1): the autosave sends no status, so a content save never changes the bid's
+        // status (it used to post "draft" and demote a shortlisted bid within two seconds).
+        ...(opts?.keepStatus ? {} : { status }),
         change_notes: changeNotes,
       }
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
@@ -1130,8 +1135,11 @@ export default function PartnerRfpDetailPage() {
         setSuccessMsg("Draft saved. You can return anytime to finish and submit.")
       }
       if (status === "submitted" && inbox) {
-        setInbox({ ...inbox, status: "bid_submitted" })
-        setExisting((prev) => (prev ? { ...prev, status: "submitted" } : prev))
+        // 121 (S1): the server keeps an agency status (shortlisted, meeting requested) on a
+        // resubmission, so show what it saved rather than assuming "submitted".
+        const savedStatus = (data.response as ResponseRow | undefined)?.status || "submitted"
+        if (savedStatus === "submitted") setInbox({ ...inbox, status: "bid_submitted" })
+        setExisting((prev) => (prev ? { ...prev, status: savedStatus } : prev))
       }
       return true
     } catch (e) {
@@ -1166,7 +1174,7 @@ export default function PartnerRfpDetailPage() {
       if (!formTouchedRef.current) return
       if (savingKind !== null) return // suspended while a manual save/submit is already in flight
       formTouchedRef.current = false
-      void save("draft", { silent: true }).then((ok) => {
+      void save("draft", { silent: true, keepStatus: true }).then((ok) => {
         setAutosaveStatus((prev) => ({
           state: ok ? "saved" : "unsaved",
           savedAt: ok ? new Date().toISOString() : prev.savedAt,
