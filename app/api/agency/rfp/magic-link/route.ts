@@ -2,13 +2,19 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { agencyGateRefusal } from "@/lib/api-auth"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
+import { orgIdFromColumn, resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
-import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import {
+  attachMagicTokenToPartnerInbox,
+  MAGIC_TOKEN_ATTACH_COLUMNS,
+  MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE,
+  type MagicTokenForAttach,
+} from "@/lib/magic-token-attach"
+import { isResendRequest, planMagicLinkResend, type ResendExistingToken } from "@/lib/magic-link-resend"
 import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { exactEmailIlike } from "@/lib/server/account-existence"
@@ -225,6 +231,26 @@ export async function POST(request: NextRequest) {
     if (existingErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: existingErr.message })
       return NextResponse.json({ error: "Failed to check for an existing invitation" }, { status: 500 })
+    }
+
+    // F7: an explicit resend renews the invitation and writes nothing else (lib/magic-link-resend.ts).
+    // No RFP record, no upsert: the content the first send wrote stays on the token. A body without
+    // `resend: true` is a first send and continues below exactly as before.
+    if (isResendRequest(body)) {
+      if (!existingToken) {
+        return NextResponse.json({ error: "There is no invitation to resend for this vendor" }, { status: 404 })
+      }
+      return await resendInvitation({
+        route,
+        userId: auth.userId,
+        profile: auth.profile,
+        service,
+        callerOrgIds,
+        project: { id: project.id as string, name: project.name as string },
+        vendorEmail,
+        vendorName,
+        matchedProfileId: (matchedProfile?.id as string | undefined) ?? null,
+      })
     }
 
     const existingIsExpired =
@@ -698,6 +724,180 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 })
   }
+}
+
+/**
+ * F7. THE RESEND PATH. Renews one existing invitation: a fresh 72-hour expiry, the same token while
+ * it is live (a new one once it has lapsed), the stored deadline unless it is missing or passed,
+ * and the invitation email again. It writes only the columns in RESEND_WRITABLE_TOKEN_COLUMNS, so
+ * evaluation criteria, budget categories, reference materials, business criteria, the scope item,
+ * client_name_released and rfp_line_id keep what the first send wrote. It creates no RFP record:
+ * nothing about the RFP changed, and a new record would move the token onto an empty line.
+ *
+ * Same permission as the first send: the caller is a paid lead agency (requireAgency), the project
+ * is one of the caller's organizations', and the token is read and updated only within them.
+ */
+async function resendInvitation(ctx: {
+  route: string
+  userId: string
+  profile: { company_name?: string | null; full_name?: string | null; display_name?: string | null } | null
+  service: NonNullable<ReturnType<typeof getServiceSupabase>>
+  callerOrgIds: Awaited<ReturnType<typeof resolveCallerOrgIds>>
+  project: { id: string; name: string }
+  vendorEmail: string
+  vendorName: string | null
+  matchedProfileId: string | null
+}) {
+  const { route, service, callerOrgIds, project, vendorEmail } = ctx
+  const readExisting = (columns: string) =>
+    service
+      .from("rfp_magic_tokens")
+      .select(`${columns}, vendor_name`)
+      .in("org_id", callerOrgIds)
+      .eq("project_id", project.id)
+      .eq("vendor_email", vendorEmail)
+      .maybeSingle()
+  let read = await readExisting(MAGIC_TOKEN_ATTACH_COLUMNS)
+  let deadlineReadable = true
+  if (read.error?.code === "42703") {
+    deadlineReadable = false
+    read = await readExisting(MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE)
+  }
+  if (read.error || !read.data) {
+    console.error("[api] failure", { route, method: "POST", code: 500, message: read.error?.message ?? "resend: token vanished" })
+    return NextResponse.json({ error: "Failed to resend invitation" }, { status: 500 })
+  }
+  const existing = read.data as unknown as MagicTokenForAttach & { vendor_name: string | null }
+  const existingForPlan: ResendExistingToken = {
+    token: existing.token,
+    expires_at: existing.expires_at,
+    response_id: existing.response_id ?? null,
+    vendor_name: existing.vendor_name ?? null,
+    ...(deadlineReadable ? { response_deadline: existing.response_deadline ?? null } : {}),
+  }
+  const now = new Date()
+  const plan = planMagicLinkResend({
+    existing: existingForPlan,
+    requestVendorName: ctx.vendorName,
+    nowMs: now.getTime(),
+    mintToken: () => crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, ""),
+    defaultDeadlineIso: defaultResponseDeadlineIso(now),
+  })
+
+  const { data: updated, error: updateErr } = await service
+    .from("rfp_magic_tokens")
+    .update(plan.patch)
+    .eq("token", existing.token)
+    .in("org_id", callerOrgIds)
+    .select(deadlineReadable ? MAGIC_TOKEN_ATTACH_COLUMNS : MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE)
+    .single()
+  if (updateErr || !updated) {
+    console.error("[api] failure", { route, method: "POST", code: 500, message: updateErr?.message })
+    return NextResponse.json({ error: "Failed to resend invitation" }, { status: 500 })
+  }
+  const tokenRow = updated as unknown as MagicTokenForAttach
+  // The token was read and updated within callerOrgIds, so its organization is the caller's own.
+  const tokenOrgId = orgIdFromColumn(tokenRow.org_id)
+  if (!tokenOrgId) {
+    console.error("[api] failure", { route, method: "POST", code: 500, message: "resend: token has no organization" })
+    return NextResponse.json({ error: "Failed to resend invitation" }, { status: 500 })
+  }
+
+  // Same send-time attach as a first send. The attach reads the token's own line and client
+  // release, which this resend left as they were, and is idempotent on attached_inbox_id.
+  const matchedVendorOrgId = ctx.matchedProfileId ? await resolveOrgIdForUser(ctx.matchedProfileId, service) : null
+  let attached = false
+  if (matchedVendorOrgId) {
+    const attachResult = await attachMagicTokenToPartnerInbox(service, { tokenRow, partnerId: matchedVendorOrgId })
+    if (attachResult.attached) attached = true
+    else console.error("[api] rfp/magic-link: resend portal attach failed", { route, reason: attachResult.reason })
+  }
+
+  // The client name only as the token releases it (D3). No budget: the token carries no released
+  // figure, and a resend does not read the record, so the vendor is told less, never more (D2).
+  const agencyName =
+    ctx.profile?.company_name?.trim() || ctx.profile?.full_name?.trim() || ctx.profile?.display_name?.trim() || "A lead agency"
+  const clientNameReleased = tokenRow.client_name_released?.trim() || null
+  const scopeItemName = tokenRow.scope_item_name?.trim() || null
+  const scopeSummary = [
+    `${agencyName} has invited you to bid on ${project.name}${clientNameReleased ? ` for ${clientNameReleased}` : ""}.`,
+    scopeItemName ? `Scope: ${scopeItemName}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ")
+  const resentVendorName = plan.patch.vendor_name ?? existing.vendor_name ?? null
+  let emailSent = false
+  try {
+    const invitation = buildVendorInvitationEmail({
+      agencyName,
+      vendorName: resentVendorName || undefined,
+      projectName: project.name,
+      scopeSummary,
+      token: tokenRow.token,
+    })
+    emailSent = await sendTransactionalEmail({ to: vendorEmail, ...invitation })
+    if (!emailSent) {
+      console.error("[api] vendor invitation email not sent (resend)", { route, method: "POST", vendorEmail })
+    }
+  } catch (emailErr) {
+    console.error("[api] vendor invitation email failed (resend)", {
+      route,
+      method: "POST",
+      vendorEmail,
+      message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+    })
+  }
+
+  let partnershipId: string | null = null
+  if (emailSent) {
+    try {
+      const ref = await markPartnershipInvited(service, { agencyId: tokenOrgId, vendorEmail, partnerId: matchedVendorOrgId })
+      partnershipId = ref.partnershipId
+    } catch (partnershipErr) {
+      console.error("[api] failed to mark partnership invited (resend)", {
+        route,
+        vendorEmail,
+        message: partnershipErr instanceof Error ? partnershipErr.message : String(partnershipErr),
+      })
+    }
+  }
+
+  // The same milestones a first send emits, on the same terms: the send only when the mail left,
+  // the deadline pair only when this resend actually moved the deadline. No token in any payload.
+  const milestones: MilestoneEvent[] = []
+  if (emailSent) {
+    milestones.push({
+      eventType: "rfp.magic_link_send",
+      orgId: tokenOrgId,
+      actorId: ctx.userId,
+      vendorOrgId: matchedVendorOrgId,
+      partnershipId,
+      subjectType: "project",
+      subjectId: project.id,
+      payload: { scope_item_name: scopeItemName, recipient_email: vendorEmail, response_deadline: plan.responseDeadline },
+    })
+  }
+  if (plan.deadlineChanged && plan.responseDeadline) {
+    milestones.push({
+      eventType: plan.priorDeadline === null ? "rfp.deadline_set" : "rfp.deadline_change",
+      orgId: tokenOrgId,
+      actorId: ctx.userId,
+      vendorOrgId: matchedVendorOrgId,
+      partnershipId,
+      subjectType: "project",
+      subjectId: project.id,
+      payload: {
+        scope_item_name: scopeItemName,
+        response_deadline: plan.responseDeadline,
+        previous_response_deadline: plan.priorDeadline,
+      },
+    })
+  }
+  if (milestones.length > 0) await recordMilestones(service, milestones)
+
+  console.log("[api] success", { route, method: "POST", userId: ctx.userId, projectId: project.id, resend: true, emailSent, attached })
+  // Same shape as a first send. No OV-A warnings: a resend sends no new text.
+  return NextResponse.json({ token: tokenRow.token, expires_at: plan.expiresAt, email_sent: emailSent, attached, warnings: [] })
 }
 
 export async function GET(request: NextRequest) {

@@ -8,7 +8,7 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { BidCompareView } from "@/components/bid-compare-view"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
-import { RfpRecordClientVisibility } from "@/components/rfp-client-visibility-control"
+import { RfpClientVisibilityTag } from "@/components/rfp-client-visibility-tag"
 import { useFetch } from "@/hooks/useFetch"
 import { isBidSummaryPending, requestBidSummary, useBidSummaryStatus, warmUpBidSummaries } from "@/lib/bid-summary-queue"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
@@ -423,11 +423,11 @@ function RankedGroup({
 
 // ── RFP header (B3) ───────────────────────────────────────────────────────────
 //
-// The client control lives on each RFP the agency is already looking at, not in a separate panel.
-// One line per record behind the RFP group: what was sent and when, the control (the client name on
-// hover), and, read-only, whether the brief text as sent names the client (only while it is hidden)
-// or shows figures (ruling OV-A). Sent copies are never rewritten from here (D5). A group whose rows
-// have no record (sent before records, unlinked) shows nothing.
+// One line per record behind the RFP group: what was sent and when, the read-only client status tag
+// (ruling CV1: no switch here; the tag opens a confirm menu, the client name on hover), and, as quiet
+// read-only tags, whether the brief text as sent names the client (only while it is hidden) or shows
+// figures (ruling OV-A, with G4's budget categories and requirements). Sent copies are never rewritten
+// from here (D5). A group whose rows have no record (sent before records, unlinked) shows nothing.
 
 const SOURCE_LABEL: Record<RfpRecordSummary["source"], string> = {
   wizard: "RFP",
@@ -477,10 +477,11 @@ function RfpRecordHeader({
                 </span>
               )}
             </div>
-            <RfpRecordClientVisibility
+            <RfpClientVisibilityTag
               recordId={record.id}
               savedVisible={record.show_client_to_vendors}
               clientName={record.client_name}
+              vendorCount={record.vendor_count ?? null}
               onSaved={onRecordSaved}
             />
           </div>

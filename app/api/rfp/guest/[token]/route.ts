@@ -15,6 +15,7 @@ import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
 import { exactEmailIlike } from "@/lib/server/account-existence"
+import { buildGuestBidContent } from "@/lib/guest-bid-row"
 
 export const dynamic = "force-dynamic"
 
@@ -652,23 +653,25 @@ export async function POST(req: Request) {
     const partner_display_name = is_existing_partner
       ? matchedProfile?.company_name?.trim() || matchedProfile?.full_name?.trim() || matchedProfile?.display_name?.trim() || vendorEmail
       : (tokenRow.vendor_name || "").trim() || vendorEmail
+    // Bid content only (lib/guest-bid-row.ts), shared by the edit and the first submit.
+    const bidContent = {
+      proposal_text,
+      budget_proposal,
+      timeline_proposal,
+      terms_disclosure,
+      attachments,
+      business_criteria_responses,
+      business_criteria_acknowledgments,
+      hasAcknowledgments,
+      budget_lines,
+      proposal_sections,
+    }
 
     if (is_edit) {
       const submittedAt = new Date().toISOString()
       const editRow = {
-        proposal_text,
-        budget_proposal,
-        timeline_proposal,
-        terms_disclosure,
-        attachments,
-        business_criteria_responses,
-        status: "submitted",
+        ...buildGuestBidContent({ ...bidContent, nowIso: submittedAt }),
         submitted_at: submittedAt,
-        updated_at: submittedAt,
-        ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
-        ...(budget_lines ? { budget_lines } : {}),
-      ...(proposal_sections ? { proposal_sections } : {}),
-        ...(proposal_sections ? { proposal_sections } : {}),
       }
       const { error: updateErr } = await saveGuestResponseRow(
         (attemptRow) => supabase.from("partner_rfp_responses").update(attemptRow).eq("id", tokenRow.response_id),
@@ -771,17 +774,10 @@ export async function POST(req: Request) {
       lead_org_id: tokenRow.org_id,
       vendor_org_id: is_existing_partner ? matchedProfile!.id : null,
       inbox_item_id: null,
-      proposal_text,
-      budget_proposal,
-      timeline_proposal,
-      terms_disclosure,
-      attachments,
-      business_criteria_responses,
       partner_display_name,
-      status: "submitted",
-      updated_at: new Date().toISOString(),
-      ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
-      ...(budget_lines ? { budget_lines } : {}),
+      // F8: the first submit dropped the guest's sections. Same builder as the edit row above, so it
+      // now carries them exactly as the edit and the vendor portal do.
+      ...buildGuestBidContent({ ...bidContent, nowIso: new Date().toISOString() }),
     }
     const { data: saved, error: insertErr } = await saveGuestResponseRow<{ id: string; [key: string]: unknown }>(
       (attemptRow) => supabase.from("partner_rfp_responses").insert(attemptRow).select("id").single(),

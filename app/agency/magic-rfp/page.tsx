@@ -54,7 +54,12 @@ import { MAX_RFP_EVALUATION_CRITERIA, type RfpEvaluationCriterion } from "@/lib/
 import { type BudgetCategory } from "@/lib/budget-categories"
 import { ClientVisibilitySwitch } from "@/components/rfp-client-visibility-control"
 import { VendorTextWarnings } from "@/components/vendor-text-warnings"
-import { lineVendorTextFields, sharedVendorTextFields } from "@/lib/rfp-vendor-text-check"
+import {
+  criteriaAndCategoryVendorTextFields,
+  lineVendorTextFields,
+  parseCriteriaOrCategoryField,
+  sharedVendorTextFields,
+} from "@/lib/rfp-vendor-text-check"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** OV-A field ids for the one line a Lightning send has (its name and its brief). */
@@ -589,6 +594,19 @@ function MagicRfpContent() {
   const applyVendorText = (field: string, text: string) => {
     if (field === `line.${LIGHTNING_LINE_KEY}.name`) setBrief((prev) => ({ ...prev, projectName: text }))
     else if (field === `line.${LIGHTNING_LINE_KEY}.description`) setBrief((prev) => ({ ...prev, scopeDescription: text }))
+    const g4 = parseCriteriaOrCategoryField(field)
+    if (g4?.kind === "category") {
+      setBudgetCategories((prev) =>
+        prev.map((c) => (c.key === g4.key ? (g4.part === "name" ? { ...c, name: text } : { ...c, note: text.trim() ? text : null }) : c))
+      )
+    } else if (g4?.kind === "criteria_notes") {
+      setBusinessCriteriaRequired((prev) => ({ ...prev, notes: text }))
+    } else if (g4?.kind === "insurance_minimum") {
+      setBusinessCriteriaRequired((prev) => {
+        const row = prev.insurance[g4.key]
+        return row ? { ...prev, insurance: { ...prev.insurance, [g4.key]: { ...row, minimum: text } } } : prev
+      })
+    }
   }
 
   const sendLightningRfps = async () => {
@@ -1236,16 +1254,21 @@ function MagicRfpContent() {
 
             {/* OV-A: warn at send, never block. A Lightning brief is its one line's own text, so
                 figures in it are flagged only while "Release budget" is off. The project name is
-                warned about but edited on the project, so it is not offered for a rewrite here. */}
+                warned about but edited on the project, so it is not offered for a rewrite here.
+                G4: the budget categories and requirements set on this page are shared text. */}
             <VendorTextWarnings
               projectId={selectedProject?.id ?? null}
               onApply={applyVendorText}
-              canApply={(field) => field.startsWith("line.")}
+              canApply={(field) => field.startsWith("line.") || parseCriteriaOrCategoryField(field) !== null}
               input={{
                 clientHidden: !showClientToVendors,
                 clientNames: [brief.clientName, clientSelection.clientName, selectedProject?.client],
                 fields: [
                   ...sharedVendorTextFields({ projectName: selectedProject?.name ?? "" }),
+                  ...criteriaAndCategoryVendorTextFields({
+                    budget_categories: budgetCategories,
+                    business_criteria_required: businessCriteriaRequired,
+                  }),
                   ...lineVendorTextFields({
                     key: LIGHTNING_LINE_KEY,
                     name: brief.projectName,
