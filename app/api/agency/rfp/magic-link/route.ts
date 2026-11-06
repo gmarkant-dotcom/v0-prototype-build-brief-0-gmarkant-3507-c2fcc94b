@@ -965,9 +965,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (projectId) {
+      // G5 / H5: the columns the invite card (components/agency-rfp-magic-link-invite.tsx,
+      // MagicTokenRow) reads, and nothing else. Never `*`: that returned the bearer token, which
+      // opens the guest bid page, and every other token column. The card resends by email and
+      // project id, so it never needs the token.
       const { data: invites, error: invitesErr } = await service
         .from("rfp_magic_tokens")
-        .select("*")
+        .select("id, vendor_email, vendor_name, status, created_at, expires_at")
         .in("org_id", callerOrgIds)
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
